@@ -162,10 +162,8 @@ Text* Page::layoutHeaderFooter(int area, const String& s) const
         Text* dummyText = Factory::createText(score()->dummy(), style);
         dummyText->mutldata()->blocks = { replaceTextMacros(oldBlock) };
         dummyText->genText();
-        if (!dummyText->xmlText().isEmpty()) {
-            dummyText->createBlocks();
-            newBlocks.insert(newBlocks.end(), dummyText->ldata()->blocks.cbegin(), dummyText->ldata()->blocks.cend());
-        }
+        dummyText->createBlocks();
+        newBlocks.insert(newBlocks.end(), dummyText->ldata()->blocks.cbegin(), dummyText->ldata()->blocks.cend());
         delete dummyText;
     }
 
