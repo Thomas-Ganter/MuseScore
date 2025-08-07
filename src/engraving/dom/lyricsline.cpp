@@ -38,6 +38,7 @@ using namespace mu;
 namespace mu::engraving {
 //---------------------------------------------------------
 //   LyricsLine
+//   implements the hypens between syllables of lyrics
 //---------------------------------------------------------
 
 static const ElementStyle lyricsLineElementStyle {
