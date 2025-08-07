@@ -22,6 +22,13 @@
 
 #pragma once
 
+#define DEBUG_LYRICS
+#ifdef  DEBUG_LYRICS
+#define LLOG LOGD
+#else
+#define LLOG LOGN
+#endif
+
 #include "../types/types.h"
 #include "line.h"
 #include "textbase.h"
