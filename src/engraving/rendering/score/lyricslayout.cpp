@@ -501,6 +501,7 @@ void LyricsLayout::createOrRemoveLyricsLine(Lyrics* item, LayoutContext& ctx)
 
 void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
 {
+    LLOG("/ Computing vertical positions for system %x", system);
     staff_idx_t nStaves = system->score()->nstaves();
 
     std::vector<staff_idx_t> visibleStaves;
@@ -511,12 +512,15 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
             computeVerticalPositions(staffIdx, system, ctx);
         }
     }
+    LLOG("\\ Computed vertical positions for system %x", system);
 }
 
 void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx)
 {
     LyricsVersesMap lyricsVersesAbove;
     LyricsVersesMap lyricsVersesBelow;
+
+    LLOG("// Computing vertical positions for staff %ld", staffIdx);
 
     collectLyricsVerses(staffIdx, system, lyricsVersesAbove, lyricsVersesBelow);
 
@@ -525,6 +529,8 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
     checkCollisionsWithStaffElements(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
     addToSkyline(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
+
+    LLOG("\\\\ Computed vertical positions for staff %ld", staffIdx);
 }
 
 void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, LyricsVersesMap& lyricsVersesAbove,
@@ -532,6 +538,8 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
 {
     track_idx_t startTrack = staffIdx * VOICES;
     track_idx_t endTrack = startTrack + VOICES;
+
+    LLOG("     || // Collecting lyrics verses for tracks %ld to %ld on staff %ld", startTrack, endTrack, staffIdx);
 
     for (MeasureBase* mb : system->measures()) {
         if (!mb->isMeasure()) {
@@ -548,6 +556,8 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
                 }
                 for (Lyrics* lyrics : toChordRest(element)->lyrics()) {
                     int verse = lyrics->verse();
+                    LLOG("     || || measure %d: Found lyrics verse %d text '%s' on track %ld", toMeasure(mb)->no() + 1, verse,
+                         muPrintable(lyrics->plainText()), track);
                     if (lyrics->placeAbove()) {
                         lyricsVersesAbove[verse].addLyrics(lyrics);
                     } else {
@@ -572,6 +582,8 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
             }
         }
     }
+
+    LLOG("     || \\\\ Collected lyrics verses for tracks %ld to %ld on staff %ld", startTrack, endTrack, staffIdx);
 }
 
 void LyricsLayout::setDefaultPositions(staff_idx_t staffIdx, const LyricsVersesMap& lyricsVersesAbove,
