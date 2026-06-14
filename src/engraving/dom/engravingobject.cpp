@@ -726,6 +726,7 @@ bool EngravingObject::isTextBase() const
 {
     return type() == ElementType::TEXT
            || type() == ElementType::LYRICS
+           || type() == ElementType::LYRICS_LABEL
            || type() == ElementType::DYNAMIC
            || type() == ElementType::EXPRESSION
            || type() == ElementType::FINGERING

@@ -568,6 +568,10 @@ void ChordRest::add(EngravingItem* e)
         m_lyrics.push_back(toLyrics(e));
         e->added();
         break;
+    case ElementType::LYRICS_LABEL:
+        addEl(e);
+        e->added();
+        break;
     default:
         EngravingItem::add(e);
         break;
@@ -592,6 +596,13 @@ void ChordRest::remove(EngravingItem* e)
         }
     }
     break;
+    case ElementType::LYRICS_LABEL:
+        if (removeEl(e)) {
+            e->removed();
+        } else {
+            LOGD("ChordRest::remove: %s %p not found", e->typeName(), e);
+        }
+        break;
     default:
         EngravingItem::remove(e);
     }
@@ -1080,6 +1091,11 @@ void ChordRest::scanElements(std::function<void(EngravingItem*)> func)
     }
     for (Lyrics* l : m_lyrics) {
         l->scanElements(func);
+    }
+    for (EngravingItem* e : m_el) {
+        if (e && e->type() == ElementType::LYRICS_LABEL) {
+            e->scanElements(func);
+        }
     }
     DurationElement* de = this;
     while (de->tuplet() && de->tuplet()->elements().front() == de) {

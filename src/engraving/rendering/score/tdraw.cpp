@@ -287,6 +287,8 @@ void TDraw::drawItem(const EngravingItem* item, Painter* painter, const PaintOpt
         break;
     case ElementType::LYRICS:       draw(item_cast<const Lyrics*>(item), painter, opt);
         break;
+    case ElementType::LYRICS_LABEL: drawTextBase(toTextBase(item), painter, opt);
+        break;
     case ElementType::LYRICSLINE_SEGMENT: draw(item_cast<const LyricsLineSegment*>(item), painter, opt);
         break;
     case ElementType::PARTIAL_LYRICSLINE_SEGMENT: draw(item_cast<const LyricsLineSegment*>(item), painter, opt);

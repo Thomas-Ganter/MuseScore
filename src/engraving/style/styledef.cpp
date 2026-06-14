@@ -125,6 +125,9 @@ const std::array<StyleDef::StyleValue, size_t(Sid::STYLES)> StyleDef::styleValue
     styleDef(lyricsMaxDashCount,                         1),
     styleDef(lyricsCenterDashedSyllables,                false),
 
+    styleDef(lyricsRepeatVerseNumber,                    true),
+    styleDef(lyricsRepeatedVerseNumberOffset,            1.0_sp),
+
     styleDef(lyricsOddFontFace,                          "Edwin"),
     styleDef(lyricsOddFontSize,                          10.0),
     styleDef(lyricsOddLineSpacing,                       1.0),

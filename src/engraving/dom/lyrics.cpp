@@ -50,6 +50,38 @@ static const ElementStyle lyricsElementStyle {
 };
 
 //---------------------------------------------------------
+//   LyricsLabel
+//---------------------------------------------------------
+
+LyricsLabel::LyricsLabel(ChordRest* parent)
+    : TextBase(ElementType::LYRICS_LABEL, parent, TextStyleType::LYRICS_ODD, ElementFlag::ON_STAFF)
+{
+    setGenerated(true);
+    setSelectable(false);
+    setAutoplace(false);
+}
+
+LyricsLabel::LyricsLabel(const LyricsLabel& l)
+    : TextBase(l)
+{
+    setGenerated(true);
+    setSelectable(false);
+    setAutoplace(false);
+}
+
+double LyricsLabel::yRelativeToStaff() const
+{
+    const double yOff = staffOffsetY();
+    return pos().y() + chordRest()->pos().y() + yOff;
+}
+
+void LyricsLabel::setYRelativeToStaff(double y)
+{
+    const double yOff = staffOffsetY();
+    mutldata()->setPosY(y - chordRest()->pos().y() - yOff);
+}
+
+//---------------------------------------------------------
 //   Lyrics
 //---------------------------------------------------------
 

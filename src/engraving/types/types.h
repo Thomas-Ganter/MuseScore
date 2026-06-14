@@ -114,6 +114,7 @@ enum class ElementType : unsigned char {
     EXPRESSION,
     BEAM,
     LYRICS,
+    LYRICS_LABEL,
     FIGURED_BASS,
     FIGURED_BASS_ITEM,
     MARKER,

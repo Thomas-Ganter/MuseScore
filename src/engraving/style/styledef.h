@@ -135,6 +135,9 @@ enum class Sid : short {
     lyricsMaxDashCount,
     lyricsCenterDashedSyllables,
 
+    lyricsRepeatVerseNumber,
+    lyricsRepeatedVerseNumberOffset,
+
     lyricsOddFontFace,
     lyricsOddFontSize,
     lyricsOddLineSpacing,

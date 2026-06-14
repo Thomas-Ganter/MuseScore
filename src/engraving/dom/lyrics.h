@@ -40,6 +40,26 @@ namespace mu::engraving {
 
 class LyricsLine;
 
+class LyricsLabel final : public TextBase
+{
+    OBJECT_ALLOCATOR(engraving, LyricsLabel)
+    DECLARE_CLASSOF(ElementType::LYRICS_LABEL)
+
+public:
+    LyricsLabel(ChordRest* parent);
+    LyricsLabel(const LyricsLabel&);
+
+    LyricsLabel* clone() const override { return new LyricsLabel(*this); }
+
+    ChordRest* chordRest() const { return toChordRest(explicitParent()); }
+
+    bool positionRelativeToNoteheadRest() const override { return true; }
+    bool allowTimeAnchor() const override { return false; }
+
+    double yRelativeToStaff() const;
+    void setYRelativeToStaff(double y);
+};
+
 class Lyrics final : public TextBase
 {
     OBJECT_ALLOCATOR(engraving, Lyrics)

@@ -224,6 +224,7 @@ EngravingItem* Factory::doCreateItem(ElementType type, EngravingItem* parent)
     case ElementType::GUITAR_BEND:       return new GuitarBend(parent->isNote() ? toNote(parent) : dummy->note());
     case ElementType::TREMOLOBAR:        return new TremoloBar(parent);
     case ElementType::LYRICS:            return new Lyrics(parent->isChordRest() ? toChordRest(parent) : dummy->chord());
+    case ElementType::LYRICS_LABEL:      return new LyricsLabel(parent->isChordRest() ? toChordRest(parent) : dummy->chord());
     case ElementType::LYRICSLINE:        return new LyricsLine(parent);
     case ElementType::FIGURED_BASS:      return new FiguredBass(parent->isSegment() ? toSegment(parent) : dummy->segment());
     case ElementType::STEM:              return new Stem(parent->isChord() ? toChord(parent) : dummy->chord());

@@ -41,6 +41,138 @@ using namespace mu;
 using namespace mu::engraving;
 using namespace mu::engraving::rendering::score;
 
+namespace {
+void clearGeneratedLyricsLabels(staff_idx_t staffIdx, System* system)
+{
+    if (!system) {
+        return;
+    }
+
+    const track_idx_t startTrack = staffIdx * VOICES;
+    const track_idx_t endTrack = startTrack + VOICES;
+
+    for (MeasureBase* mb : system->measures()) {
+        if (!mb->isMeasure()) {
+            continue;
+        }
+
+        for (Segment& segment : toMeasure(mb)->segments()) {
+            if (!segment.isChordRestType()) {
+                continue;
+            }
+
+            for (track_idx_t track = startTrack; track < endTrack; ++track) {
+                EngravingItem* element = segment.element(track);
+                if (!element || !element->isChordRest()) {
+                    continue;
+                }
+
+                ChordRest* cr = toChordRest(element);
+                std::vector<EngravingItem*> toDelete;
+                toDelete.reserve(cr->el().size());
+
+                for (EngravingItem* child : cr->el()) {
+                    if (child && child->type() == ElementType::LYRICS_LABEL && child->generated()) {
+                        toDelete.push_back(child);
+                    }
+                }
+
+                for (EngravingItem* child : toDelete) {
+                    cr->remove(child);
+                    delete child;
+                }
+            }
+        }
+    }
+}
+
+}
+
+// ---------------------------------------------------------------------------
+// extractLeadingVerseNumber
+//   Parse a leading verse-number fragment from a lyrics string.
+//   Pattern: [digits][optional dot][optional whitespace] followed by a letter.
+//   Trailing whitespace is stripped from the returned string.
+//   Examples:  "1. Wir" -> "1."   "1 Wir" -> "1"   "1.Wir" -> "1."   "Wir" -> ""
+// ---------------------------------------------------------------------------
+String LyricsLayout::extractLeadingVerseNumber(const String& text)
+{
+    if (text.isEmpty() || !text.at(0).isDigit()) {
+        return String();
+    }
+
+    size_t i = 0;
+    // consume all leading digits
+    while (i < text.size() && text.at(i).isDigit()) {
+        ++i;
+    }
+
+    // optionally consume a dot
+    if (i < text.size() && text.at(i) == u'.') {
+        ++i;
+    }
+    const size_t endDotOrDigit = i;
+
+    // skip whitespace
+    while (i < text.size() && text.at(i).isSpace()) {
+        ++i;
+    }
+
+    // must be followed by at least one letter
+    if (i >= text.size() || !text.at(i).isLetter()) {
+        return String();
+    }
+
+    return text.mid(0, endDotOrDigit);
+}
+
+// ---------------------------------------------------------------------------
+// buildVerseNumberMap
+//   Scan all measures to find the first Lyrics per verse for the given staff
+//   that has a digit-leading fragment. Returns verseIdx -> display string.
+// ---------------------------------------------------------------------------
+std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_t staffIdx)
+{
+    std::map<int, String> result;
+    if (!score) {
+        LLOG("VRNUM buildVerseNumberMap: staff=%ld no score", staffIdx);
+        return result;
+    }
+
+    LLOG("VRNUM buildVerseNumberMap: staff=%ld START", staffIdx);
+
+    const track_idx_t startTrack = staffIdx * VOICES;
+    const track_idx_t endTrack = startTrack + VOICES;
+
+    for (Measure* measure = score->firstMeasure(); measure; measure = measure->nextMeasure()) {
+        for (Segment& seg : measure->segments()) {
+            if (!seg.isChordRestType()) {
+                continue;
+            }
+            for (track_idx_t track = startTrack; track < endTrack; ++track) {
+                EngravingItem* el = seg.element(track);
+                if (!el || !el->isChordRest()) {
+                    continue;
+                }
+                for (Lyrics* lyr : toChordRest(el)->lyrics()) {
+                    const int verse = lyr->verse();
+                    if (result.count(verse)) {
+                        continue; // already have a number for this verse
+                    }
+                    const String leading = extractLeadingVerseNumber(lyr->plainText());
+                    if (!leading.isEmpty()) {
+                        result[verse] = leading;
+                        LLOG("VRNUM buildVerseNumberMap: staff=%ld verse=%d leading='%s' measure=%d",
+                             staffIdx, verse, muPrintable(leading), measure->measureNumber() + 1);
+                    }
+                }
+            }
+        }
+    }
+    LLOG("VRNUM buildVerseNumberMap: staff=%ld END size=%ld", staffIdx, result.size());
+    return result;
+}
+
 void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)
 {
     if (!item->explicitParent()) {   // palette & clone trick
@@ -522,15 +654,65 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
     LLOG("// Computing vertical positions for staff %ld", staffIdx);
 
+    clearGeneratedLyricsLabels(staffIdx, system);
+
     collectLyricsVerses(staffIdx, system, lyricsVersesAbove, lyricsVersesBelow);
 
     setDefaultPositions(staffIdx, lyricsVersesAbove, lyricsVersesBelow, ctx);
+
+    // Keep verse-number detection/collection active while the rendering path is redesigned.
+    const std::map<int, String> verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
+    UNUSED(verseNumberMap);
+
 
     checkCollisionsWithStaffElements(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
     addToSkyline(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
-    LLOG("\\\\ Computed vertical positions for staff %ld", staffIdx);
+        auto createDummyLabels = [&](const LyricsVersesMap& lyricsVerses) {
+            for (const auto& pair : lyricsVerses) {
+                UNUSED(pair.first);
+
+                const LyricsVerse& lyricsVerse = pair.second;
+                if (lyricsVerse.lyrics().empty()) {
+                    continue;
+                }
+
+                Lyrics* anchorLyrics = lyricsVerse.lyrics().front();
+                ChordRest* anchorCR = anchorLyrics ? anchorLyrics->chordRest() : nullptr;
+                if (!anchorCR) {
+                    continue;
+                }
+
+                auto* label = new LyricsLabel(anchorCR);
+                label->setPlainText(u"[]");
+
+                // Attach first so track/staff context is fully initialized before text layout.
+                anchorCR->add(label);
+
+                TextLayout::layoutBaseTextBase1(label, ctx);
+                TextLayout::computeTextHighResShape(label, label->mutldata());
+
+                const double offset = label->absoluteFromSpatium(ctx.conf().styleS(Sid::lyricsRepeatedVerseNumberOffset));
+                const RectF anchorBbox = anchorLyrics->ldata()->bbox();
+                const RectF labelBbox = label->ldata()->bbox();
+
+                // Align the label to the anchor's visual baseline area using bbox bottoms,
+                // and place it fully to the left of the anchor's visual left edge.
+                const double anchorLeft = anchorLyrics->x() + anchorBbox.left();
+                const double anchorBottom = anchorLyrics->y() + anchorBbox.bottom();
+                const double labelX = anchorLeft - offset - labelBbox.right();
+                const double labelY = anchorBottom - labelBbox.bottom();
+
+                label->mutldata()->setPosX(labelX);
+                label->mutldata()->setPosY(labelY);
+            }
+        };
+
+        createDummyLabels(lyricsVersesAbove);
+        createDummyLabels(lyricsVersesBelow);
+
+    LLOG("\\\\\\ Computed vertical positions for staff %ld", staffIdx);
 }
 
 void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, LyricsVersesMap& lyricsVersesAbove,
@@ -556,8 +738,7 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
                 }
                 for (Lyrics* lyrics : toChordRest(element)->lyrics()) {
                     int verse = lyrics->verse();
-                    LLOG("     || || measure %d: Found lyrics verse %d text '%s' on track %ld", toMeasure(mb)->no() + 1, verse,
-                         muPrintable(lyrics->plainText()), track);
+                    LLOG("     || || measure %d: Found lyrics verse %d text '%s' on track %ld", toMeasure(mb)->measureNumber() +1, verse,muPrintable(lyrics->plainText()), track);
                     if (lyrics->placeAbove()) {
                         lyricsVersesAbove[verse].addLyrics(lyrics);
                     } else {

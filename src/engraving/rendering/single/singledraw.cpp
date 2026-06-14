@@ -253,6 +253,8 @@ void SingleDraw::drawItem(const EngravingItem* item, Painter* painter, const Pai
         break;
     case ElementType::LYRICS:       draw(item_cast<const Lyrics*>(item), painter, opt);
         break;
+    case ElementType::LYRICS_LABEL: drawTextBase(toTextBase(item), painter, opt);
+        break;
 
     case ElementType::MARKER:               draw(item_cast<const Marker*>(item), painter, opt);
         break;

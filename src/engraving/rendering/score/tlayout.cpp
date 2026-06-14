@@ -339,6 +339,9 @@ void TLayout::layoutItem(EngravingItem* item, LayoutContext& ctx)
         break;
     case ElementType::LYRICS:           layoutLyrics(item_cast<Lyrics*>(item), ctx);
         break;
+    case ElementType::LYRICS_LABEL:
+        // Positioned explicitly in LyricsLayout::computeVerticalPositions().
+        break;
     case ElementType::LYRICSLINE_SEGMENT: layoutLyricsLineSegment(item_cast<LyricsLineSegment*>(item), ctx);
         break;
     case ElementType::PARTIAL_LYRICSLINE_SEGMENT: layoutLyricsLineSegment(item_cast<LyricsLineSegment*>(item), ctx);
