@@ -399,6 +399,11 @@ void Lyrics::endEdit(EditData& ed)
 {
     TextBase::endEdit(ed);
 
+    if (score()) {
+        // Verse-number labels are derived at system level; refresh all systems after lyrics edits.
+        score()->setLayoutAll();
+    }
+
     triggerLayout();
     if (m_separator) {
         m_separator->triggerLayout();
@@ -466,6 +471,8 @@ bool Lyrics::setProperty(Pid propertyId, const PropertyValue& v)
 {
     ChordRest* scr = nullptr;
     ChordRest* ecr = nullptr;
+    const String oldText = (propertyId == Pid::TEXT) ? plainText() : String();
+    const int oldVerse = (propertyId == Pid::VERSE) ? m_verse : -1;
 
     switch (propertyId) {
     case Pid::PLACEMENT:
@@ -529,6 +536,13 @@ bool Lyrics::setProperty(Pid propertyId, const PropertyValue& v)
         }
         break;
     }
+
+    if (score() && ((propertyId == Pid::TEXT && plainText() != oldText)
+                    || (propertyId == Pid::VERSE && m_verse != oldVerse))) {
+        // Verse-number labels are derived globally; refresh all systems when source data changes.
+        score()->setLayoutAll();
+    }
+
     triggerLayout();
     return true;
 }

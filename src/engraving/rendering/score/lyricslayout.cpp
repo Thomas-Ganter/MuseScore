@@ -40,6 +40,7 @@
 #include "textlayout.h"
 
 #include <limits>
+#include <set>
 
 using namespace mu;
 using namespace mu::engraving;
@@ -667,17 +668,61 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
     LLOG("/ Computing vertical positions for system %p", system);
     staff_idx_t nStaves = system->score()->nstaves();
 
-    std::vector<staff_idx_t> visibleStaves;
-    visibleStaves.reserve(system->staves().size());
+    ChordRest* widthProbeCR = nullptr;
+    const track_idx_t maxTrack = nStaves * VOICES;
+    for (MeasureBase* mb : system->measures()) {
+        if (!mb || !mb->isMeasure()) {
+            continue;
+        }
+        for (Segment& segment : toMeasure(mb)->segments()) {
+            if (!segment.isChordRestType()) {
+                continue;
+            }
+            for (track_idx_t track = 0; track < maxTrack; ++track) {
+                EngravingItem* e = segment.element(track);
+                if (e && e->isChordRest()) {
+                    widthProbeCR = toChordRest(e);
+                    break;
+                }
+            }
+            if (widthProbeCR) {
+                break;
+            }
+        }
+        if (widthProbeCR) {
+            break;
+        }
+    }
+
+    double globalMaxLabelWidth = 0.0;
+    if (widthProbeCR) {
+        std::set<String> uniqueLabels;
+        uniqueLabels.insert(u"[]");
+
+        for (staff_idx_t staffIdx = 0; staffIdx < nStaves; ++staffIdx) {
+            const std::map<int, String> verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
+            for (const auto& versePair : verseNumberMap) {
+                uniqueLabels.insert(u"[" + versePair.second + u"]");
+            }
+        }
+
+        LyricsLabel widthProbe(widthProbeCR);
+        for (const String& labelText : uniqueLabels) {
+            widthProbe.setPlainText(labelText);
+            TextLayout::layoutBaseTextBase1(&widthProbe, ctx);
+            TextLayout::computeTextHighResShape(&widthProbe, widthProbe.mutldata());
+            globalMaxLabelWidth = std::max(globalMaxLabelWidth, widthProbe.ldata()->bbox().width());
+        }
+    }
 
     for (staff_idx_t staffIdx = 0; staffIdx < nStaves; ++staffIdx) {
         if (system->staff(staffIdx)->show()) {
-            computeVerticalPositions(staffIdx, system, ctx);
+            computeVerticalPositions(staffIdx, system, ctx, globalMaxLabelWidth);
         }
     }
 }
 
-void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx)
+void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx, double globalMaxLabelWidth)
 {
     LyricsVersesMap lyricsVersesAbove;
     LyricsVersesMap lyricsVersesBelow;
@@ -689,12 +734,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
     setDefaultPositions(staffIdx, lyricsVersesAbove, lyricsVersesBelow, ctx);
 
-    // Keep verse-number detection/collection active while the rendering path is redesigned.
     const std::map<int, String> verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
-    UNUSED(verseNumberMap);
-
-    // PoC labels enabled.
-    bool enableLyricsLabelsPoC = true;
 
     checkCollisionsWithStaffElements(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
@@ -703,7 +743,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
         struct LabelPlacement {
             LyricsLabel* label = nullptr;
             ChordRest* anchorCR = nullptr;
-            double candidateRightEdge = 0.0;
+            double candidateRightEdge = 0.0;  // used for first-system close placement
             double labelRight = 0.0;
             double labelWidth = 0.0;
             double labelY = 0.0;
@@ -714,7 +754,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
         auto collectDummyLabels = [&](const LyricsVersesMap& lyricsVerses) {
             for (const auto& pair : lyricsVerses) {
-                UNUSED(pair.first);
+                int verseNumber = pair.first;
 
                 const LyricsVerse& lyricsVerse = pair.second;
                 if (lyricsVerse.lyrics().empty()) {
@@ -748,7 +788,9 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                 LyricsLabel* label = nullptr;
                 // Since we now always clear old labels, always create fresh ones.
                 label = new LyricsLabel(anchorCR);
-                label->setPlainText(u"[]");
+                const auto verseLabelIt = verseNumberMap.find(verseNumber);
+                const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
+                label->setPlainText(u"[" + verseLabel + u"]");
 
                 // Attach first so track/staff context is fully initialized before text layout.
                 anchorCR->add(label);
@@ -760,12 +802,12 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                 const RectF anchorBbox = anchorLyrics->ldata()->bbox();
                 const RectF labelBbox = label->ldata()->bbox();
 
-                // Keep Y coupled to the anchor's visual baseline area.
-                const double anchorLeftSystem = anchorCR->x() + anchorLyrics->x() + anchorBbox.left();
-                const double anchorBottom = anchorLyrics->y() + anchorBbox.bottom();
-                const double labelY = anchorBottom - labelBbox.bottom();
+                // Baseline-align the generated label with the source lyrics text.
+                const double anchorBaseline = anchorLyrics->y() + anchorLyrics->baseLine();
+                const double labelY = anchorBaseline - label->baseLine();
 
-                // Candidate right edge if this label was positioned independently.
+                // Candidate right edge for first-system close placement.
+                const double anchorLeftSystem = anchorCR->x() + anchorLyrics->x() + anchorBbox.left();
                 const double candidateRightEdge = anchorLeftSystem - offset;
 
                 placements.push_back({
@@ -792,7 +834,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
             const bool isFirstSystem = (system->firstMeasure() == system->score()->firstMeasure());
 
             if (isFirstSystem) {
-                // Keep first system behavior: right-align labels to the left-most candidate edge.
+                // First system: right-align each label just before its anchor lyrics with a small offset.
                 double sharedRightEdge = std::numeric_limits<double>::infinity();
                 for (const LabelPlacement& placement : placements) {
                     sharedRightEdge = std::min(sharedRightEdge, placement.candidateRightEdge);
@@ -800,37 +842,37 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
                 for (const LabelPlacement& placement : placements) {
                     if (!placement.anchorCR) {
-                        continue;  // safety check: skip invalid anchor
+                        continue;
                     }
                     const double labelX = sharedRightEdge - placement.anchorCR->x() - placement.labelRight;
                     placement.label->mutldata()->setPosX(labelX);
                     placement.label->mutldata()->setPosY(placement.labelY);
                 }
             } else {
-                // From second system on: place a fixed right-aligned column whose widest label starts at system edge.
-                double maxLabelWidth = 0.0;
-                for (const LabelPlacement& placement : placements) {
-                    maxLabelWidth = std::max(maxLabelWidth, placement.labelWidth);
+                // Subsequent systems: use the global score-wide column width for consistent alignment.
+                double effectiveMaxLabelWidth = globalMaxLabelWidth;
+                if (effectiveMaxLabelWidth <= 0.0) {
+                    for (const LabelPlacement& placement : placements) {
+                        effectiveMaxLabelWidth = std::max(effectiveMaxLabelWidth, placement.labelWidth);
+                    }
                 }
 
-                // Use page coordinates to avoid parent-local coordinate ambiguities.
                 const Measure* firstMeasure = system->firstMeasure();
                 if (!firstMeasure) {
-                    // System is empty or has no valid measures; use default safe placement.
                     for (const LabelPlacement& placement : placements) {
                         if (!placement.anchorCR) {
-                            continue;  // safety check
+                            continue;
                         }
                         placement.label->mutldata()->setPosX(0.0);
                         placement.label->mutldata()->setPosY(placement.labelY);
                     }
                 } else {
                     const double systemLeftPage = firstMeasure->pageBoundingRect().left();
-                    const double sharedRightPage = systemLeftPage + maxLabelWidth;
+                    const double sharedRightPage = systemLeftPage + effectiveMaxLabelWidth;
 
                     for (const LabelPlacement& placement : placements) {
                         if (!placement.anchorCR) {
-                            continue;  // safety check: skip invalid anchor
+                            continue;
                         }
                         const double labelX = sharedRightPage - placement.anchorCR->pageX() - placement.labelRight;
                         placement.label->mutldata()->setPosX(labelX);
