@@ -39,6 +39,7 @@
 #include "tlayout.h"
 #include "textlayout.h"
 
+#include <cmath>
 #include <limits>
 #include <set>
 
@@ -48,6 +49,175 @@ using namespace mu::engraving::rendering::score;
 
 namespace {
 constexpr bool kVerboseLyricsVerseScanLog = false;
+
+int textColumns(const String& s)
+{
+    int col = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (!s.at(i).isHighSurrogate()) {
+            ++col;
+        }
+    }
+    return col;
+}
+
+String extractLeadingVerseNumberLocal(const String& text)
+{
+    if (text.isEmpty() || !text.at(0).isDigit()) {
+        return String();
+    }
+
+    size_t i = 0;
+    while (i < text.size() && text.at(i).isDigit()) {
+        ++i;
+    }
+
+    if (i < text.size() && text.at(i) == u'.') {
+        ++i;
+    }
+    const size_t endDotOrDigit = i;
+
+    while (i < text.size() && text.at(i).isSpace()) {
+        ++i;
+    }
+
+    if (i >= text.size() || !text.at(i).isLetter()) {
+        return String();
+    }
+
+    return text.mid(0, endDotOrDigit);
+}
+
+void applyLeadingVerseNumberLabelFormatting(Lyrics* lyrics, const String& leading, Score* score)
+{
+    if (!lyrics || !score || leading.isEmpty()) {
+        return;
+    }
+
+    const String plain = lyrics->plainText();
+    if (!plain.startsWith(leading)) {
+        return;
+    }
+
+    const int leadingCols = textColumns(leading);
+    if (leadingCols <= 0) {
+        return;
+    }
+
+    // Ensure text blocks exist so selection formatting operates on real fragments.
+    lyrics->createBlocks();
+
+    TextCursor cursor(lyrics);
+    cursor.setSelectLine(0);
+    cursor.setSelectColumn(0);
+    cursor.setRow(0);
+    cursor.setColumn(static_cast<size_t>(leadingCols));
+
+    const FontStyle labelStyle = FontStyle(score->style().styleI(Sid::lyricsLabelFirstSystemFontStyle));
+    const Color labelColor = score->style().styleV(Sid::lyricsLabelFirstSystemColor).value<Color>();
+
+    // Keep the explicit selection while applying multiple attributes.
+    // setFormat() clears selection when not in edit mode, which can cause
+    // subsequent calls to style the whole syllable.
+    cursor.changeSelectionFormat(FormatId::Bold, bool(labelStyle & FontStyle::Bold));
+    cursor.changeSelectionFormat(FormatId::Italic, bool(labelStyle & FontStyle::Italic));
+    cursor.changeSelectionFormat(FormatId::Underline, bool(labelStyle & FontStyle::Underline));
+    cursor.changeSelectionFormat(FormatId::Strike, bool(labelStyle & FontStyle::Strike));
+    cursor.changeSelectionFormat(FormatId::Color, labelColor);
+    lyrics->setTextInvalid();
+}
+
+void cleanupLeadingVerseNumberFormattingIfDefault(Score* score, staff_idx_t staffIdx)
+{
+    if (!score) {
+        return;
+    }
+
+    std::map<int, bool> firstSyllableChecked;
+    const track_idx_t startTrack = staffIdx * VOICES;
+    const track_idx_t endTrack = startTrack + VOICES;
+
+    for (Measure* measure = score->firstMeasure(); measure; measure = measure->nextMeasure()) {
+        for (Segment& seg : measure->segments()) {
+            if (!seg.isChordRestType()) {
+                continue;
+            }
+            for (track_idx_t track = startTrack; track < endTrack; ++track) {
+                EngravingItem* el = seg.element(track);
+                if (!el || !el->isChordRest()) {
+                    continue;
+                }
+
+                for (Lyrics* lyr : toChordRest(el)->lyrics()) {
+                    const int verse = lyr->verse();
+                    if (firstSyllableChecked.count(verse)) {
+                        continue;
+                    }
+                    firstSyllableChecked[verse] = true;
+
+                    const String plain = lyr->plainText();
+                    const String leading = extractLeadingVerseNumberLocal(plain);
+                    if (leading.isEmpty()) {
+                        continue;
+                    }
+
+                    const int leadingCols = textColumns(leading);
+                    if (leadingCols <= 0) {
+                        continue;
+                    }
+
+                    const FontStyle defaultStyle = FontStyle(lyr->propertyDefault(Pid::FONT_STYLE).value<int>());
+                    const Color defaultColor = lyr->propertyDefault(Pid::COLOR).value<Color>();
+                    const String defaultFamily = lyr->propertyDefault(Pid::FONT_FACE).value<String>();
+                    const double defaultSize = lyr->propertyDefault(Pid::FONT_SIZE).toDouble();
+                    const VerticalAlignment defaultValign = VerticalAlignment(lyr->propertyDefault(Pid::TEXT_SCRIPT_ALIGN).toInt());
+
+                    const String plainXml = TextBase::plainToXmlText(plain);
+                    if (lyr->xmlText() == plainXml) {
+                        continue;
+                    }
+
+                    lyr->createBlocks();
+                    const std::list<TextFragment> fragments = lyr->fragmentList();
+
+                    bool leadingHasDefaultStyleAndColor = true;
+                    bool allFormattingDefault = true;
+                    int col = 0;
+
+                    for (const TextFragment& fragment : fragments) {
+                        const FontStyle fragmentStyle = fragment.format.style();
+                        const Color fragmentColor = fragment.format.color();
+                        const String fragmentFamily = fragment.format.fontFamily();
+                        const double fragmentSize = fragment.format.fontSize();
+                        const VerticalAlignment fragmentValign = fragment.format.valign();
+
+                        if (fragmentStyle != defaultStyle
+                            || fragmentColor != defaultColor
+                            || fragmentFamily != defaultFamily
+                            || std::fabs(fragmentSize - defaultSize) > 0.01
+                            || fragmentValign != defaultValign) {
+                            allFormattingDefault = false;
+                        }
+
+                        for (size_t i = 0; i < fragment.text.size(); ++i) {
+                            if (fragment.text.at(i).isHighSurrogate()) {
+                                continue;
+                            }
+                            if (col < leadingCols && (fragmentStyle != defaultStyle || fragmentColor != defaultColor)) {
+                                leadingHasDefaultStyleAndColor = false;
+                            }
+                            ++col;
+                        }
+                    }
+
+                    if (leadingHasDefaultStyleAndColor && allFormattingDefault) {
+                        lyr->setPlainText(plain);
+                    }
+                }
+            }
+        }
+    }
+}
 
 void clearGeneratedLyricsLabels(staff_idx_t staffIdx, System* system)
 {
@@ -193,6 +363,9 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
 
                     const String leading = extractLeadingVerseNumber(lyr->plainText());
                     if (!leading.isEmpty()) {
+                        // Do not alter the original Lyrics formatting here — leave any
+                        // in-place formatting untouched. We only record the leading
+                        // verse-number string for label generation.
                         result[verse] = leading;
                         LLOG("VRNUM buildVerseNumberMap: staff=%ld verse=%d leading='%s' measure=%d",
                              staffIdx, verse, muPrintable(leading), measure->measureNumber() + 1);
@@ -667,6 +840,7 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
 {
     LLOG("/ Computing vertical positions for system %p", system);
     staff_idx_t nStaves = system->score()->nstaves();
+    const bool generateLyricsLabels = ctx.conf().styleB(Sid::lyricsRepeatVerseNumber);
 
     ChordRest* widthProbeCR = nullptr;
     const track_idx_t maxTrack = nStaves * VOICES;
@@ -695,7 +869,7 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
     }
 
     double globalMaxLabelWidth = 0.0;
-    if (widthProbeCR) {
+    if (generateLyricsLabels && widthProbeCR) {
         std::set<String> uniqueLabels;
         uniqueLabels.insert(u"[]");
 
@@ -717,12 +891,13 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
 
     for (staff_idx_t staffIdx = 0; staffIdx < nStaves; ++staffIdx) {
         if (system->staff(staffIdx)->show()) {
-            computeVerticalPositions(staffIdx, system, ctx, globalMaxLabelWidth);
+            computeVerticalPositions(staffIdx, system, ctx, globalMaxLabelWidth, generateLyricsLabels);
         }
     }
 }
 
-void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx, double globalMaxLabelWidth)
+void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx,
+                                            double globalMaxLabelWidth, bool generateLyricsLabels)
 {
     LyricsVersesMap lyricsVersesAbove;
     LyricsVersesMap lyricsVersesBelow;
@@ -730,11 +905,20 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
     // ALWAYS clear old generated labels - they may be stale after measure moves.
     clearGeneratedLyricsLabels(staffIdx, system);
 
+    // When the feature is disabled, also drop redundant custom prefix formatting
+    // if it effectively resolves to default text formatting.
+    if (!generateLyricsLabels) {
+        cleanupLeadingVerseNumberFormattingIfDefault(system ? system->score() : nullptr, staffIdx);
+    }
+
     collectLyricsVerses(staffIdx, system, lyricsVersesAbove, lyricsVersesBelow);
 
     setDefaultPositions(staffIdx, lyricsVersesAbove, lyricsVersesBelow, ctx);
 
-    const std::map<int, String> verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
+    std::map<int, String> verseNumberMap;
+    if (generateLyricsLabels) {
+        verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
+    }
 
     const bool isFirstSystem = (system->firstMeasure() == system->score()->firstMeasure());
 
@@ -742,6 +926,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
     addToSkyline(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
+    if (generateLyricsLabels) {
         struct LabelPlacement {
             LyricsLabel* label = nullptr;
             ChordRest* anchorCR = nullptr;
@@ -792,7 +977,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                 label = new LyricsLabel(anchorCR);
                 const auto verseLabelIt = verseNumberMap.find(verseNumber);
                 const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
-                label->setPlainText(u"[" + verseLabel + u"]");
+                label->setPlainText(verseLabel);
 
                 // Style: first system -> configured bold+color; subsequent systems -> configured bold+color.
                 if (isFirstSystem) {
@@ -890,6 +1075,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                 }
             }
         }
+    }
 
     LLOG("\\\\\\ Computed vertical positions for staff %ld, liveLabels=%zu",
          staffIdx, LyricsLabel::debugLiveCount());

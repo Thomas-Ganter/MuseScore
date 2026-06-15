@@ -115,7 +115,8 @@ bool CharFormat::operator==(const CharFormat& cf) const
     return cf.style() == style()
            && cf.valign() == valign()
            && cf.fontSize() == fontSize()
-           && cf.fontFamily() == fontFamily();
+           && cf.fontFamily() == fontFamily()
+           && cf.color() == color();
 }
 
 //---------------------------------------------------------
@@ -128,6 +129,7 @@ CharFormat& CharFormat::operator=(const CharFormat& cf)
     setValign(cf.valign());
     setFontSize(cf.fontSize());
     setFontFamily(cf.fontFamily());
+    setColor(cf.color());
 
     return *this;
 }
@@ -435,6 +437,10 @@ const CharFormat TextCursor::selectedFragmentsFormat() const
 
             if (resultFormat.valign() != fragment.format.valign()) {
                 resultFormat.setValign(VerticalAlignment::AlignUndefined);
+            }
+
+            if (resultFormat.color() != fragment.format.color()) {
+                resultFormat.setColor(Color());
             }
 
             column += fragCols;
@@ -1399,6 +1405,7 @@ FormatValue CharFormat::formatValue(FormatId id) const
     case FormatId::Valign: return static_cast<int>(valign());
     case FormatId::FontSize: return fontSize();
     case FormatId::FontFamily: return fontFamily();
+    case FormatId::Color: return color();
     }
 
     return FormatValue();
@@ -1431,6 +1438,9 @@ void CharFormat::setFormatValue(FormatId id, const FormatValue& val)
         break;
     case FormatId::FontFamily:
         m_fontFamily = std::get<String>(val);
+        break;
+    case FormatId::Color:
+        m_color = std::get<Color>(val);
         break;
     }
 }
@@ -1513,12 +1523,14 @@ String TextBlock::text(int col1, int len, bool withFormat) const
     int col = 0;
     double size;
     String family;
+    Color color;
     for (const auto& f : m_fragments) {
         if (f.text.isEmpty()) {
             continue;
         }
         if (withFormat) {
-            s += TextBase::getHtmlStartTag(f.format.fontSize(), size, f.format.fontFamily(), family, f.format.style(), f.format.valign());
+            s += TextBase::getHtmlStartTag(f.format.fontSize(), size, f.format.fontFamily(), family, f.format.style(), f.format.valign(),
+                                           f.format.color(), color);
         }
 
         for (size_t i = 0; i < f.text.size(); ++i) {
@@ -1819,6 +1831,9 @@ bool TextBase::prepareFormat(const String& token, CharFormat& format)
         format.setValign(VerticalAlignment::AlignNormal);
     } else if (token.startsWith(u"font ")) {
         String remainder = token.mid(5);
+        if (remainder.endsWith(u"/")) {
+            remainder = remainder.left(remainder.size() - 1);
+        }
         if (remainder.startsWith(u"size=\"")) {
             format.setFontSize(parseNumProperty(remainder.mid(6)));
             return true;
@@ -1826,6 +1841,10 @@ bool TextBase::prepareFormat(const String& token, CharFormat& format)
             String face = parseStringProperty(remainder.mid(6));
             face = unEscape(face);
             format.setFontFamily(face);
+            return true;
+        } else if (remainder.startsWith(u"color=\"")) {
+            Color color = Color::fromString(parseStringProperty(remainder.mid(7)));
+            format.setColor(color);
             return true;
         } else {
             LOGD("cannot parse html property <%s> in text <%s>", muPrintable(token), muPrintable(m_text));
@@ -2846,7 +2865,7 @@ PointF TextBase::defaultPos() const
 //   getHtmlStartTag - helper function for extractText with withFormat = true
 //---------------------------------------------------------
 String TextBase::getHtmlStartTag(double newSize, double& curSize, const String& newFamily, String& curFamily, FontStyle style,
-                                 VerticalAlignment vAlign)
+                                 VerticalAlignment vAlign, const Color& newColor, Color& curColor)
 {
     String s;
     if (std::fabs(newSize - curSize) > 0.1) {
@@ -2856,6 +2875,10 @@ String TextBase::getHtmlStartTag(double newSize, double& curSize, const String& 
     if (newFamily != curFamily && newFamily != "ScoreText") {
         curFamily = newFamily;
         s += String(u"<font face=\"%1\"/>").arg(newFamily);
+    }
+    if (newColor != curColor) {
+        curColor = newColor;
+        s += String(u"<font color=\"%1\"/>").arg(newColor.isValid() ? String::fromStdString(newColor.toString()) : String());
     }
     if (style & FontStyle::Bold) {
         s += u"<b>";

@@ -25,6 +25,7 @@
 #include <variant>
 
 #include "draw/fontmetrics.h"
+#include "draw/types/color.h"
 
 #include "modularity/ioc.h"
 #include "../iengravingfontsprovider.h"
@@ -62,10 +63,10 @@ enum class VerticalAlignment : signed char {
 //---------------------------------------------------------
 
 enum class FormatId : char {
-    Bold, Italic, Underline, Strike, Valign, FontSize, FontFamily
+    Bold, Italic, Underline, Strike, Valign, FontSize, FontFamily, Color
 };
 
-using FormatValue = std::variant<std::monostate, bool, int, double, String>;
+using FormatValue = std::variant<std::monostate, bool, int, double, String, Color>;
 
 //---------------------------------------------------------
 //   MultiClick
@@ -102,9 +103,11 @@ public:
     VerticalAlignment valign() const { return m_valign; }
     double fontSize() const { return m_fontSize; }
     String fontFamily() const { return m_fontFamily; }
+    Color color() const { return m_color; }
     void setValign(VerticalAlignment val) { m_valign = val; }
     void setFontSize(double val) { m_fontSize = val; }
     void setFontFamily(const String& val) { m_fontFamily = val; }
+    void setColor(const Color& val) { m_color = val; }
 
     FormatValue formatValue(FormatId) const;
     void setFormatValue(FormatId, const FormatValue& val);
@@ -115,6 +118,7 @@ private:
     VerticalAlignment m_valign = VerticalAlignment::AlignNormal;
     double m_fontSize = 12.0;
     String m_fontFamily;
+    Color m_color;
 };
 
 //---------------------------------------------------------
@@ -546,7 +550,7 @@ private:
     virtual int getPropertyFlagsIdx(Pid id) const override;
     String stripText(bool, bool, bool) const;
 
-    static String getHtmlStartTag(double, double&, const String&, String&, FontStyle, VerticalAlignment);
+    static String getHtmlStartTag(double, double&, const String&, String&, FontStyle, VerticalAlignment, const Color&, Color&);
     static String getHtmlEndTag(FontStyle, VerticalAlignment);
 
     static void swap(size_t& r1, size_t& c1, size_t& r2, size_t& c2);

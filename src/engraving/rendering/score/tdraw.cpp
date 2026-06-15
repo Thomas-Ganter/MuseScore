@@ -1786,7 +1786,16 @@ void TDraw::draw(const TextBlock& textBlock, const TextBase* item, Painter* pain
 void TDraw::draw(const TextFragment& textFragment, const TextBase* item, muse::draw::Painter* painter)
 {
     painter->setFont(textFragment.font(item));
-    painter->drawText(textFragment.pos, textFragment.text);
+    Pen currentPen(painter->pen());
+    if (textFragment.format.color().isValid()) {
+        Pen fragmentPen(currentPen);
+        fragmentPen.setColor(textFragment.format.color());
+        painter->setPen(fragmentPen);
+        painter->drawText(textFragment.pos, textFragment.text);
+        painter->setPen(currentPen);
+    } else {
+        painter->drawText(textFragment.pos, textFragment.text);
+    }
 }
 
 void TDraw::drawTextLineBaseSegment(const TextLineBaseSegment* item, Painter* painter, const PaintOptions& opt)

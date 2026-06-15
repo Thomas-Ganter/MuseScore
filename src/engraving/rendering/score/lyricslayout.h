@@ -67,7 +67,8 @@ private:
 
     static Lyrics* findNextLyrics(const ChordRest* endChordRest, int verseNumber);
 
-    static void computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx, double globalMaxLabelWidth);
+    static void computeVerticalPositions(staff_idx_t staffIdx, System* system, LayoutContext& ctx,
+                                         double globalMaxLabelWidth, bool generateLyricsLabels);
     static void collectLyricsVerses(staff_idx_t staffIdx, System* system, LyricsVersesMap& lyricsVersesAbove,
                                     LyricsVersesMap& lyricsVersesBelow);
 
