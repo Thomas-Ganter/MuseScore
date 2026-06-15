@@ -736,6 +736,8 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
     const std::map<int, String> verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
 
+    const bool isFirstSystem = (system->firstMeasure() == system->score()->firstMeasure());
+
     checkCollisionsWithStaffElements(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
     addToSkyline(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
@@ -792,6 +794,15 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                 const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
                 label->setPlainText(u"[" + verseLabel + u"]");
 
+                // Style: first system -> configured bold+color; subsequent systems -> configured bold+color.
+                if (isFirstSystem) {
+                    label->setFontStyle(FontStyle(ctx.conf().styleI(Sid::lyricsLabelFirstSystemFontStyle)));
+                    label->setColor(ctx.conf().styleV(Sid::lyricsLabelFirstSystemColor).value<Color>());
+                } else {
+                    label->setFontStyle(FontStyle(ctx.conf().styleI(Sid::lyricsLabelFollowingSystemFontStyle)));
+                    label->setColor(ctx.conf().styleV(Sid::lyricsLabelFollowingSystemColor).value<Color>());
+                }
+
                 // Attach first so track/staff context is fully initialized before text layout.
                 anchorCR->add(label);
 
@@ -831,8 +842,6 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                staffIdx, system, placements.size(), LyricsLabel::debugLiveCount());
 
         if (!placements.empty()) {
-            const bool isFirstSystem = (system->firstMeasure() == system->score()->firstMeasure());
-
             if (isFirstSystem) {
                 // First system: right-align each label just before its anchor lyrics with a small offset.
                 double sharedRightEdge = std::numeric_limits<double>::infinity();

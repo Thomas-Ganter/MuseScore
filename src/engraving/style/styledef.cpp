@@ -158,6 +158,11 @@ const std::array<StyleDef::StyleValue, size_t(Sid::STYLES)> StyleDef::styleValue
     styleDef(lyricsEvenFrameBgColor,                     Color::transparent),
     styleDef(lyricsEvenPosition,                         AlignH::HCENTER),
 
+    styleDef(lyricsLabelFirstSystemFontStyle,            int(FontStyle::Bold)),
+    styleDef(lyricsLabelFirstSystemColor,                Color(180, 0, 0)),
+    styleDef(lyricsLabelFollowingSystemFontStyle,        int(FontStyle::Bold)),
+    styleDef(lyricsLabelFollowingSystemColor,            Color(128, 128, 128)),
+
     styleDef(figuredBassFontFamily,                      String(u"MScoreBC")),
 
     styleDef(figuredBassYOffset,                         6.0),

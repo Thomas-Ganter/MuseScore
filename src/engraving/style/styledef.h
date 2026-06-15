@@ -168,6 +168,11 @@ enum class Sid : short {
     lyricsEvenFrameBgColor,
     lyricsEvenPosition,
 
+    lyricsLabelFirstSystemFontStyle,
+    lyricsLabelFirstSystemColor,
+    lyricsLabelFollowingSystemFontStyle,
+    lyricsLabelFollowingSystemColor,
+
     figuredBassFontFamily,
     figuredBassYOffset,
     figuredBassLineHeight,
