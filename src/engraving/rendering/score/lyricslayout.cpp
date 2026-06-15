@@ -37,6 +37,8 @@
 #include "tlayout.h"
 #include "textlayout.h"
 
+#include <limits>
+
 using namespace mu;
 using namespace mu::engraving;
 using namespace mu::engraving::rendering::score;
@@ -134,6 +136,7 @@ String LyricsLayout::extractLeadingVerseNumber(const String& text)
 std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_t staffIdx)
 {
     std::map<int, String> result;
+    std::map<int, bool> firstSyllableChecked;
     if (!score) {
         LLOG("VRNUM buildVerseNumberMap: staff=%ld no score", staffIdx);
         return result;
@@ -156,9 +159,12 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
                 }
                 for (Lyrics* lyr : toChordRest(el)->lyrics()) {
                     const int verse = lyr->verse();
-                    if (result.count(verse)) {
-                        continue; // already have a number for this verse
+                    if (firstSyllableChecked.count(verse)) {
+                        continue; // only inspect first syllable for each verse
                     }
+
+                    firstSyllableChecked[verse] = true;
+
                     const String leading = extractLeadingVerseNumber(lyr->plainText());
                     if (!leading.isEmpty()) {
                         result[verse] = leading;
@@ -670,6 +676,16 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
     addToSkyline(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
         auto createDummyLabels = [&](const LyricsVersesMap& lyricsVerses) {
+            struct LabelPlacement {
+                LyricsLabel* label = nullptr;
+                double candidateRightEdge = 0.0;
+                double labelRight = 0.0;
+                double labelY = 0.0;
+            };
+
+            std::vector<LabelPlacement> placements;
+            placements.reserve(lyricsVerses.size());
+
             for (const auto& pair : lyricsVerses) {
                 UNUSED(pair.first);
 
@@ -697,15 +713,36 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                 const RectF anchorBbox = anchorLyrics->ldata()->bbox();
                 const RectF labelBbox = label->ldata()->bbox();
 
-                // Align the label to the anchor's visual baseline area using bbox bottoms,
-                // and place it fully to the left of the anchor's visual left edge.
+                // Keep Y coupled to the anchor's visual baseline area.
                 const double anchorLeft = anchorLyrics->x() + anchorBbox.left();
                 const double anchorBottom = anchorLyrics->y() + anchorBbox.bottom();
-                const double labelX = anchorLeft - offset - labelBbox.right();
                 const double labelY = anchorBottom - labelBbox.bottom();
 
-                label->mutldata()->setPosX(labelX);
-                label->mutldata()->setPosY(labelY);
+                // Candidate right edge if this label was positioned independently.
+                const double candidateRightEdge = anchorLeft - offset;
+
+                placements.push_back({
+                    .label = label,
+                    .candidateRightEdge = candidateRightEdge,
+                    .labelRight = labelBbox.right(),
+                    .labelY = labelY,
+                });
+            }
+
+            if (placements.empty()) {
+                return;
+            }
+
+            // Right-align all labels to the left-most candidate right edge.
+            double sharedRightEdge = std::numeric_limits<double>::infinity();
+            for (const LabelPlacement& placement : placements) {
+                sharedRightEdge = std::min(sharedRightEdge, placement.candidateRightEdge);
+            }
+
+            for (const LabelPlacement& placement : placements) {
+                const double labelX = sharedRightEdge - placement.labelRight;
+                placement.label->mutldata()->setPosX(labelX);
+                placement.label->mutldata()->setPosY(placement.labelY);
             }
         };
 
