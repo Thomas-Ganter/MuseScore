@@ -48,6 +48,9 @@ class LyricsLabel final : public TextBase
 public:
     LyricsLabel(ChordRest* parent);
     LyricsLabel(const LyricsLabel&);
+    ~LyricsLabel() override;
+
+    static size_t debugLiveCount();
 
     LyricsLabel* clone() const override { return new LyricsLabel(*this); }
 

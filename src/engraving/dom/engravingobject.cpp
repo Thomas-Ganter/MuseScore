@@ -79,7 +79,7 @@ EngravingObject::EngravingObject(const EngravingObject& se)
     m_score = se.m_score;
     m_isParentExplicitlySet = se.m_isParentExplicitlySet;
     m_elementStyle = se.m_elementStyle;
-    if (m_elementStyle) {
+    if (m_elementStyle && se.m_propertyFlagsList) {
         size_t n = m_elementStyle->size();
         m_propertyFlagsList = new PropertyFlags[n];
         for (size_t i = 0; i < n; ++i) {
@@ -625,6 +625,11 @@ PropertyFlags EngravingObject::propertyFlags(Pid id) const
 
     int i = getPropertyFlagsIdx(id);
     if (i == -1) {
+        return f;
+    }
+    // Safety check: m_propertyFlagsList may be null if initElementStyle was not called
+    if (!m_propertyFlagsList) {
+        LOGW() << "EngravingObject::propertyFlags: m_propertyFlagsList is NULL for type=" << typeName() << " id=" << int(id);
         return f;
     }
     return m_propertyFlagsList[i];

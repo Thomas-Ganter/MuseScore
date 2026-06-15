@@ -957,8 +957,6 @@ void MeasureLayout::layoutMeasure(MeasureBase* currentMB, LayoutContext& ctx)
                     if (cr) {
                         for (Lyrics* l : cr->lyrics()) {
                             if (l) {
-                                LLOG("Layouting lyrics '%s' in segment %zu for chord %zu staffIdx: %zu", muPrintable(
-                                         l->xmlText()), segment.tick(), cr->tick(), staffIdx);
                                 TLayout::layoutLyrics(l, ctx);
                             }
                         }

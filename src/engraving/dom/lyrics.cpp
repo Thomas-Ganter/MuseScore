@@ -36,6 +36,8 @@
 
 #include "log.h"
 
+#include <atomic>
+
 using namespace mu;
 using namespace mu::engraving;
 
@@ -43,6 +45,8 @@ namespace mu::engraving {
 //---------------------------------------------------------
 //   lyricsElementStyle
 //---------------------------------------------------------
+
+static std::atomic<size_t> s_lyricsLabelLiveCount { 0 };
 
 static const ElementStyle lyricsElementStyle {
     { Sid::lyricsPlacement, Pid::PLACEMENT },
@@ -56,17 +60,37 @@ static const ElementStyle lyricsElementStyle {
 LyricsLabel::LyricsLabel(ChordRest* parent)
     : TextBase(ElementType::LYRICS_LABEL, parent, TextStyleType::LYRICS_ODD, ElementFlag::ON_STAFF)
 {
+    const size_t liveNow = ++s_lyricsLabelLiveCount;
+    initElementStyle(&lyricsElementStyle);
     setGenerated(true);
     setSelectable(false);
     setAutoplace(false);
+    LLOG("LyricsLabel::ctor this=%p parent=%p live=%zu", this, parent, liveNow);
 }
 
 LyricsLabel::LyricsLabel(const LyricsLabel& l)
     : TextBase(l)
 {
+    const size_t liveNow = ++s_lyricsLabelLiveCount;
+    // Ensure element style is initialized for copy
+    if (!m_propertyFlagsList) {
+        initElementStyle(&lyricsElementStyle);
+    }
     setGenerated(true);
     setSelectable(false);
     setAutoplace(false);
+    LLOG("LyricsLabel::copy-ctor this=%p parent=%p live=%zu", this, explicitParent(), liveNow);
+}
+
+LyricsLabel::~LyricsLabel()
+{
+    const size_t liveNow = --s_lyricsLabelLiveCount;
+    LLOG("LyricsLabel::dtor this=%p parent=%p live=%zu", this, explicitParent(), liveNow);
+}
+
+size_t LyricsLabel::debugLiveCount()
+{
+    return s_lyricsLabelLiveCount.load();
 }
 
 double LyricsLabel::yRelativeToStaff() const

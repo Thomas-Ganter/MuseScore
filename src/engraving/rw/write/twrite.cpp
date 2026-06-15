@@ -1102,6 +1102,9 @@ void TWrite::write(const Chord* item, XmlWriter& xml, WriteContext& ctx)
         if (e->isChordLine() && toChordLine(e)->note()) { // this is now written by Note
             continue;
         }
+        if (e->generated()) { // Skip generated elements like LyricsLabel
+            continue;
+        }
         writeItem(e, xml, ctx);
     }
     xml.endElement();
