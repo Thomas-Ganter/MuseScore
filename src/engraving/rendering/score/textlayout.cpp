@@ -365,6 +365,8 @@ void TextLayout::layoutTextBlock(TextBlock* item, const TextBase* t)
             // for the next fragment if there is no next fragment
             if (fi != fiLast) {
                 const double w  = fm.width(f.text);
+                    // Debug: log fragment width calculations (help investigate leading verse-number sizing)
+                    // LOGD() << "TextLayout fragment width: text='" << f.text << "' fontSize=" << f.calculatedFontSize(t) << " width=" << w << " x=" << x;
                 x += w;
             }
 
@@ -372,6 +374,7 @@ void TextLayout::layoutTextBlock(TextBlock* item, const TextBase* t)
             f.pos.ry() -= yOffset;
 
             RectF textBRect = fm.tightBoundingRect(f.text).translated(f.pos);
+                // LOGD() << "TextLayout fragment bbox: text='" << f.text << "' bbox=" << textBRect;
             bool useDynamicSymShape = fragmentFont.type() == Font::Type::MusicSymbol && t->isDynamic();
             if (useDynamicSymShape) {
                 const Dynamic* dyn = toDynamic(t);

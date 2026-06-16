@@ -419,6 +419,16 @@ public:
     void cmdAddPitch(const NoteInputParams& params, bool addFlag, bool insert);
     void cmdAddPitch(int note, bool addFlag, bool insert);
 
+    // verse number map cache for lyrics labels
+    struct VerseNumberCache {
+        bool dirty = true;
+        std::map<staff_idx_t, std::map<int, String>> maps;
+    };
+    VerseNumberCache& verseNumberCache() { return m_verseNumberCache; }
+    const VerseNumberCache& verseNumberCache() const { return m_verseNumberCache; }
+    void setCachedVerseNumberMap(staff_idx_t staffIdx, const std::map<int, String>& map);
+    std::map<int, String> cachedVerseNumberMap(staff_idx_t staffIdx) const;
+
     void cmdAddStretch(double);
     void cmdAddGrace(NoteType, int);
     void cmdResetNoteAndRestGroupings();
@@ -1156,6 +1166,8 @@ private:
     MasterScore* m_masterScore = nullptr;
     std::list<MuseScoreView*> m_viewer;
     Excerpt* m_excerpt = nullptr;
+    // cached verse number maps per staff
+    VerseNumberCache m_verseNumberCache;
 
     String m_mscoreVersion;
     int m_mscoreRevision = 0;

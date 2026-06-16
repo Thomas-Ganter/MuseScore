@@ -1406,6 +1406,7 @@ FormatValue CharFormat::formatValue(FormatId id) const
     case FormatId::FontSize: return fontSize();
     case FormatId::FontFamily: return fontFamily();
     case FormatId::Color: return color();
+    case FormatId::Invisible: return invisible();
     }
 
     return FormatValue();
@@ -1441,6 +1442,9 @@ void CharFormat::setFormatValue(FormatId id, const FormatValue& val)
         break;
     case FormatId::Color:
         m_color = std::get<Color>(val);
+        break;
+    case FormatId::Invisible:
+        m_invisible = std::get<bool>(val);
         break;
     }
 }

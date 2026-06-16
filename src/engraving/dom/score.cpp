@@ -59,6 +59,7 @@
 #include "clef.h"
 #include "dynamic.h"
 #include "excerpt.h"
+#include "rendering/score/lyricslayout.h"
 #include "factory.h"
 #include "fermata.h"
 #include "glissando.h"
@@ -286,6 +287,32 @@ Score::~Score()
 
     delete m_rootItem;
     m_rootItem = nullptr;
+}
+
+// ensure default initialized members exist; methods implemented in header
+
+void Score::setCachedVerseNumberMap(staff_idx_t staffIdx, const std::map<int, String>& map)
+{
+    auto &existing = m_verseNumberCache.maps[staffIdx];
+    // Merge: do not overwrite existing non-empty entries with empty ones
+    for (const auto &p : map) {
+        const int verse = p.first;
+        const String &label = p.second;
+        if (existing.count(verse) == 0) {
+            existing[verse] = label;
+        } else if (existing[verse].isEmpty() && !label.isEmpty()) {
+            existing[verse] = label;
+        }
+    }
+}
+
+std::map<int, String> Score::cachedVerseNumberMap(staff_idx_t staffIdx) const
+{
+    auto it = m_verseNumberCache.maps.find(staffIdx);
+    if (it != m_verseNumberCache.maps.end()) {
+        return it->second;
+    }
+    return {};
 }
 
 muse::async::Channel<LoopBoundaryType, unsigned> Score::loopBoundaryTickChanged() const
@@ -839,6 +866,49 @@ bool Score::isOpen() const
 void Score::setIsOpen(bool open)
 {
     m_isOpen = open;
+    if (open) {
+        LOGD() << "Score::setIsOpen: called for score='" << name() << "'";
+        // Precompute verse number map on open only if the style flag requests labels
+        mu::engraving::rendering::score::LayoutContext dummyCtx(this); // lightweight default
+        if (style().styleB(Sid::lyricsRepeatVerseNumber)) {
+            // Precompute per-staff verse maps and also emit a formatted, grouped dump by instrument
+            std::map<String, std::map<int, String>> instrumentMaps; // instrument name -> verse->label
+            for (staff_idx_t staffIdx = 0; staffIdx < nstaves(); ++staffIdx) {
+                auto map = mu::engraving::rendering::score::LyricsLayout::buildVerseNumberMap(this, staffIdx);
+                setCachedVerseNumberMap(staffIdx, map);
+
+                // determine instrument name for this staff (best-effort)
+                String instrName = u"Unknown";
+                if (staffIdx < static_cast<staff_idx_t>(m_staves.size())) {
+                    Staff* s = m_staves[staffIdx];
+                    if (s && s->part()) {
+                        const Instrument* instr = s->part()->instrument();
+                        if (instr) {
+                            instrName = instr->instrumentLabel().longName();
+                        }
+                    }
+                }
+
+                // merge per-staff map into instrument grouping
+                for (const auto& p : map) {
+                    instrumentMaps[instrName][p.first] = p.second;
+                }
+            }
+            m_verseNumberCache.dirty = false;
+
+            // Emit formatted dump grouped by instrument
+            LOGD() << "Found Verse Numbers:";
+            for (const auto& im : instrumentMaps) {
+                const String& instr = im.first;
+                LOGD() << "- Instrument " << muPrintable(instr);
+                for (const auto& vp : im.second) {
+                    LOGD() << "  - Verse " << vp.first << " -> '" << muPrintable(vp.second) << "'";
+                }
+            }
+            // Placeholder for max width: measured at first layout pass
+            LOGD() << "max Breite: (measured on first layout pass)";
+        }
+    }
 }
 
 //---------------------------------------------------------

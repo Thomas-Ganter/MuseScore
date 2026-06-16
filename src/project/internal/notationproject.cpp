@@ -55,6 +55,8 @@
 #include "defer.h"
 #include "log.h"
 
+#include "engraving/rendering/score/lyricslayout.h"
+
 using namespace mu;
 using namespace muse;
 using namespace muse::io;
@@ -205,6 +207,28 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
     mu::engraving::compat::EngravingCompat::doPreLayoutCompatIfNeeded(m_engravingProject->masterScore());
 
     masterScore->updateCapo(/* ignoreNotationUpdate */ true);
+
+    // Precompute verse-number maps for all child scores now that the score and style
+    // are initialized but before the first layout pass. This ensures layout-time
+    // does not have to scan for verse numbers.
+    for (Score* s : masterScore->scoreList()) {
+        if (!s) {
+            continue;
+        }
+        if (!s->style().styleB(Sid::lyricsRepeatVerseNumber)) {
+            LOGD() << "Score '" << s->name() << "' does not have lyricsRepeatVerseNumber style flag set, skipping verse number map cache.";
+            continue;
+        }
+        LOGD() << "Precomputing verse-number maps for score='" << s->name() << "'";
+        for (staff_idx_t staffIdx = 0; staffIdx < s->nstaves(); ++staffIdx) {
+            auto map = mu::engraving::rendering::score::LyricsLayout::buildVerseNumberMap(s, staffIdx);
+            s->setCachedVerseNumberMap(staffIdx, map);
+            for (const auto& p : map) {
+                LOGD() << "  staff=" << staffIdx << " verse=" << p.first << " -> '" << muPrintable(p.second) << "'";
+            }
+        }
+        s->verseNumberCache().dirty = false;
+    }
 
     if (openParams.unrollRepeats && masterScore->repeatList().size() > 1) {
         MasterScore* original = masterScore;

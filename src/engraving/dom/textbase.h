@@ -63,7 +63,7 @@ enum class VerticalAlignment : signed char {
 //---------------------------------------------------------
 
 enum class FormatId : char {
-    Bold, Italic, Underline, Strike, Valign, FontSize, FontFamily, Color
+    Bold, Italic, Underline, Strike, Valign, FontSize, FontFamily, Color, Invisible
 };
 
 using FormatValue = std::variant<std::monostate, bool, int, double, String, Color>;
@@ -108,6 +108,8 @@ public:
     void setFontSize(double val) { m_fontSize = val; }
     void setFontFamily(const String& val) { m_fontFamily = val; }
     void setColor(const Color& val) { m_color = val; }
+    bool invisible() const { return m_invisible; }
+    void setInvisible(bool val) { m_invisible = val; }
 
     FormatValue formatValue(FormatId) const;
     void setFormatValue(FormatId, const FormatValue& val);
@@ -119,6 +121,7 @@ private:
     double m_fontSize = 12.0;
     String m_fontFamily;
     Color m_color;
+    bool m_invisible = false;
 };
 
 //---------------------------------------------------------

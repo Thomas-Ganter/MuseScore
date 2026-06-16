@@ -58,6 +58,7 @@ public:
     static void layout(LyricsLineSegment* item, LayoutContext& ctx);
 
     static void computeVerticalPositions(System* system, LayoutContext& ctx);
+    static std::map<int, String> buildVerseNumberMap(Score* score, staff_idx_t staffIdx);
 
 private:
     static void createOrRemoveLyricsLine(Lyrics* item, LayoutContext& ctx);
@@ -84,7 +85,6 @@ private:
                              const LyricsVersesMap& lyricsVersesBelow);
 
     static String extractLeadingVerseNumber(const String& text);
-    static std::map<int, String> buildVerseNumberMap(Score* score, staff_idx_t staffIdx);
 
     static double lyricsLineStartX(const LyricsLineSegment* item);
     static double lyricsLineEndX(const LyricsLineSegment* item, const Lyrics* endLyrics = nullptr);

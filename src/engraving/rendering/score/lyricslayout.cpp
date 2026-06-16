@@ -367,6 +367,29 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
                         // in-place formatting untouched. We only record the leading
                         // verse-number string for label generation.
                         result[verse] = leading;
+                        // Low-risk: mark leading range invisible in-memory so layout
+                        // accounts for width, but rendering will skip painting it.
+                        //lyr->createBlocks();
+                        // mark fragments covering the leading columns as invisible
+                        const int leadingCols = textColumns(leading);
+                        if ((leadingCols > 0) && false) {
+                            int col = 0;
+                            for (TextBlock& tb : lyr->mutldata()->blocks) {
+                                for (TextFragment& frag : tb.fragments()) {
+                                    int fragCols = frag.columns();
+                                    if (col + fragCols <= leadingCols) {
+                                        frag.changeFormat(FormatId::Invisible, FormatValue(true));
+                                    } else if (col < leadingCols && col + fragCols > leadingCols) {
+                                        // overlapping fragment: mark whole frag invisible for now
+                                        frag.changeFormat(FormatId::Invisible, FormatValue(true));
+                                    }
+                                    col += fragCols;
+                                    if (col >= leadingCols) break;
+                                }
+                                if (col >= leadingCols) break;
+                            }
+                            lyr->setTextInvalid();
+                        }
                         LLOG("VRNUM buildVerseNumberMap: staff=%ld verse=%d leading='%s' measure=%d",
                              staffIdx, verse, muPrintable(leading), measure->measureNumber() + 1);
                     }
@@ -375,6 +398,11 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
         }
     }
     LLOG("VRNUM buildVerseNumberMap: staff=%ld END size=%ld", staffIdx, result.size());
+    // Also emit detailed debug entries so we can always see the computed map in logs.
+    for (const auto& p : result) {
+        LOGD() << "VRNUM buildVerseNumberMap DUMP: staff=" << staffIdx << " verse=" << p.first
+               << " label='" << muPrintable(p.second) << "'";
+    }
     return result;
 }
 
@@ -468,10 +496,13 @@ void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)
         // should have text layout to be able to do it correctly.
         DO_ASSERT(ldata->blocks.size() != 0);
         if (!leading.isEmpty() || !trailing.isEmpty()) {
-//                   LOGD("create leading, trailing <%s> -- <%s><%s>", muPrintable(text), muPrintable(leading), muPrintable(trailing));
             const TextBlock& tb = ldata->blocks.at(0);
 
-            const double leadingWidth = tb.xpos(leading.size(), item) - tb.boundingRect().x();
+                 const double leadingXpos = tb.xpos(leading.size(), item);
+                 const double leadingWidth = leadingXpos - tb.boundingRect().x();
+                 LOGD() << "LyricsLayout leading measurement: leading='" << leading << "' leading.size=" << leading.size()
+                     << " tb.columns=" << tb.columns() << " leadingXpos=" << leadingXpos << " tb.bbox.x=" << tb.boundingRect().x()
+                     << " leadingWidth=" << leadingWidth;
             const size_t trailingPos = text.size() - trailing.size();
             const double trailingWidth = tb.boundingRect().right() - tb.xpos(trailingPos, item);
 
@@ -838,7 +869,6 @@ void LyricsLayout::createOrRemoveLyricsLine(Lyrics* item, LayoutContext& ctx)
 
 void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
 {
-    LLOG("/ Computing vertical positions for system %p", system);
     staff_idx_t nStaves = system->score()->nstaves();
     const bool generateLyricsLabels = ctx.conf().styleB(Sid::lyricsRepeatVerseNumber);
 
@@ -874,11 +904,18 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
         uniqueLabels.insert(u"[]");
 
         for (staff_idx_t staffIdx = 0; staffIdx < nStaves; ++staffIdx) {
-            const std::map<int, String> verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
+            // Do NOT build or mutate the verse-number map during layout.
+            // Always read the precomputed cache; if it's dirty, log and use cached map (may be empty).
+            std::map<int, String> verseNumberMap = system->score()->cachedVerseNumberMap(staffIdx);
+            if (system->score()->verseNumberCache().dirty) {
+                LLOG("VRNUM computeVerticalPositions: verseNumberCache dirty during precompute for staff=%ld - using cached map", staffIdx);
+            }
             for (const auto& versePair : verseNumberMap) {
                 uniqueLabels.insert(u"[" + versePair.second + u"]");
             }
         }
+        // Clear dirty flag after precomputation
+        system->score()->verseNumberCache().dirty = false;
 
         LyricsLabel widthProbe(widthProbeCR);
         for (const String& labelText : uniqueLabels) {
@@ -917,7 +954,19 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
 
     std::map<int, String> verseNumberMap;
     if (generateLyricsLabels) {
-        verseNumberMap = buildVerseNumberMap(system->score(), staffIdx);
+        // Layout-time MUST NOT build or mutate the verse-number map.
+        // Always read the precomputed cache; if it's dirty, that's an invariant
+        // violation indicating we failed to precompute earlier.
+        Score* score = system->score();
+        if (!score) {
+            LLOG("VRNUM computeVerticalPositions: no score for staff=%ld", staffIdx);
+        } else if (score->verseNumberCache().dirty) {
+            LLOG("VRNUM ERROR: verseNumberCache dirty during layout for staff=%ld - invariant violated", staffIdx);
+            // Do NOT call buildVerseNumberMap here. Use cached map (may be empty)
+            verseNumberMap = score->cachedVerseNumberMap(staffIdx);
+        } else {
+            verseNumberMap = score->cachedVerseNumberMap(staffIdx);
+        }
     }
 
     const bool isFirstSystem = (system->firstMeasure() == system->score()->firstMeasure());
@@ -940,6 +989,7 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
         placements.reserve(lyricsVersesAbove.size() + lyricsVersesBelow.size());
 
         auto collectDummyLabels = [&](const LyricsVersesMap& lyricsVerses) {
+            std::set<int> createdVerses;
             for (const auto& pair : lyricsVerses) {
                 int verseNumber = pair.first;
 
@@ -972,12 +1022,26 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
                     continue;  // ChordRest's measure is not in this system
                 }
 
+                // Avoid creating multiple labels for same verse in this system
+                if (createdVerses.count(verseNumber)) {
+                    continue;
+                }
+
+                const auto verseLabelIt = verseNumberMap.find(verseNumber);
+                const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
+                // If no label text, skip creating a generated label here
+                if (verseLabel.isEmpty()) {
+                    continue;
+                }
+
                 LyricsLabel* label = nullptr;
                 // Since we now always clear old labels, always create fresh ones.
                 label = new LyricsLabel(anchorCR);
-                const auto verseLabelIt = verseNumberMap.find(verseNumber);
-                const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
+                // Debug: log creation and associated verse label
+                LOGD() << "LyricsLayout create label: staff=" << staffIdx << " cr=" << anchorCR
+                       << " verse=" << verseNumber << " label='" << muPrintable(verseLabel) << "'";
                 label->setPlainText(verseLabel);
+                createdVerses.insert(verseNumber);
 
                 // Style: first system -> configured bold+color; subsequent systems -> configured bold+color.
                 if (isFirstSystem) {
@@ -1076,9 +1140,6 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
             }
         }
     }
-
-    LLOG("\\\\\\ Computed vertical positions for staff %ld, liveLabels=%zu",
-         staffIdx, LyricsLabel::debugLiveCount());
 }
 
 void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, LyricsVersesMap& lyricsVersesAbove,
@@ -1086,10 +1147,6 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
 {
     track_idx_t startTrack = staffIdx * VOICES;
     track_idx_t endTrack = startTrack + VOICES;
-
-    if (kVerboseLyricsVerseScanLog) {
-        LLOG("     || // Collecting lyrics verses for tracks %ld to %ld on staff %ld", startTrack, endTrack, staffIdx);
-    }
 
     for (MeasureBase* mb : system->measures()) {
         if (!mb->isMeasure()) {
@@ -1106,9 +1163,6 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
                 }
                 for (Lyrics* lyrics : toChordRest(element)->lyrics()) {
                     int verse = lyrics->verse();
-                    if (kVerboseLyricsVerseScanLog) {
-                        LLOG("     || || measure %d: Found lyrics verse %d text '%s' on track %ld", toMeasure(mb)->measureNumber() +1, verse,muPrintable(lyrics->plainText()), track);
-                    }
                     if (lyrics->placeAbove()) {
                         lyricsVersesAbove[verse].addLyrics(lyrics);
                     } else {
@@ -1134,9 +1188,6 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
         }
     }
 
-    if (kVerboseLyricsVerseScanLog) {
-        LLOG("     || \\\\ Collected lyrics verses for tracks %ld to %ld on staff %ld", startTrack, endTrack, staffIdx);
-    }
 }
 
 void LyricsLayout::setDefaultPositions(staff_idx_t staffIdx, const LyricsVersesMap& lyricsVersesAbove,

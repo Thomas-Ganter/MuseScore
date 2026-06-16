@@ -1785,6 +1785,27 @@ void TDraw::draw(const TextBlock& textBlock, const TextBase* item, Painter* pain
 
 void TDraw::draw(const TextFragment& textFragment, const TextBase* item, muse::draw::Painter* painter)
 {
+    // Skip drawing fragments explicitly marked invisible (they still occupy layout)
+    if (textFragment.format.invisible() && false) {
+        LOGD() << "TextFragment invisible (transparent-draw): text='" << textFragment.text << "' pos=" << textFragment.pos;
+
+        // Dump painter state to help debugging
+        LOGD() << "  painter pen: " << painter->pen().color().toString() << " width=" << painter->pen().widthF();
+        LOGD() << "  painter worldTransform dx/dy: " << painter->worldTransform().dx() << "/" << painter->worldTransform().dy()
+               << " hasClipping=" << painter->hasClipping();
+
+        // Draw with a fully transparent pen so drawText() still executes (glyph/layout side-effects)
+        painter->setFont(textFragment.font(item));
+        Pen currentPen(painter->pen());
+        Pen transparentPen(currentPen);
+        transparentPen.setColor(muse::draw::Color::transparent);
+        painter->setPen(transparentPen);
+        painter->drawText(textFragment.pos, textFragment.text);
+        painter->setPen(currentPen);
+        LOGD() << "  transparent draw done for fragment";
+        return;
+    }
+
     painter->setFont(textFragment.font(item));
     Pen currentPen(painter->pen());
     if (textFragment.format.color().isValid()) {
