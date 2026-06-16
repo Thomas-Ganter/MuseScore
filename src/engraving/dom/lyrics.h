@@ -109,6 +109,11 @@ public:
 
     void adjustPrevious();
 
+    // Called before editing begins on this Lyrics element to capture state
+    void prepareForEdit();
+    // Called after editing ends on this Lyrics element; returns true if verse map changed
+    void finishEdit();
+
     bool needRemoveInvalidSegments() const { return m_needRemoveInvalidSegments; }
     void setNeedRemoveInvalidSegments();
     void removeInvalidSegments();
@@ -147,6 +152,8 @@ private:
     LyricsLine* m_separator = nullptr;
     bool m_needRemoveInvalidSegments = false;
     bool m_avoidBarlines = true;
+    // captured leading verse fragment before edit
+    String m_leadingVerseBefore;
 };
 
 //---------------------------------------------------------

@@ -38,6 +38,8 @@ public:
 
     String oldXmlText;
     size_t startUndoIdx = 0;
+    // leading verse number text captured at start of edit for Lyrics
+    String leadingVerseBefore;
 
     TextCursor* cursor() const;
 

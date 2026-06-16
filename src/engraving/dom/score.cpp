@@ -293,17 +293,9 @@ Score::~Score()
 
 void Score::setCachedVerseNumberMap(staff_idx_t staffIdx, const std::map<int, String>& map)
 {
-    auto &existing = m_verseNumberCache.maps[staffIdx];
-    // Merge: do not overwrite existing non-empty entries with empty ones
-    for (const auto &p : map) {
-        const int verse = p.first;
-        const String &label = p.second;
-        if (existing.count(verse) == 0) {
-            existing[verse] = label;
-        } else if (existing[verse].isEmpty() && !label.isEmpty()) {
-            existing[verse] = label;
-        }
-    }
+    // Always replace: precomputeAndCacheVerseNumberMaps builds a complete map from scratch,
+    // so stale entries from previous edits must not survive.
+    m_verseNumberCache.maps[staffIdx] = map;
 }
 
 std::map<int, String> Score::cachedVerseNumberMap(staff_idx_t staffIdx) const

@@ -46,6 +46,7 @@
 using namespace mu;
 using namespace mu::engraving;
 using namespace mu::engraving::rendering::score;
+#include "lyrics_utils.h"
 
 namespace {
 constexpr bool kVerboseLyricsVerseScanLog = false;
@@ -61,71 +62,7 @@ int textColumns(const String& s)
     return col;
 }
 
-String extractLeadingVerseNumberLocal(const String& text)
-{
-    if (text.isEmpty() || !text.at(0).isDigit()) {
-        return String();
-    }
-
-    size_t i = 0;
-    while (i < text.size() && text.at(i).isDigit()) {
-        ++i;
-    }
-
-    if (i < text.size() && text.at(i) == u'.') {
-        ++i;
-    }
-    const size_t endDotOrDigit = i;
-
-    while (i < text.size() && text.at(i).isSpace()) {
-        ++i;
-    }
-
-    if (i >= text.size() || !text.at(i).isLetter()) {
-        return String();
-    }
-
-    return text.mid(0, endDotOrDigit);
-}
-
-void applyLeadingVerseNumberLabelFormatting(Lyrics* lyrics, const String& leading, Score* score)
-{
-    if (!lyrics || !score || leading.isEmpty()) {
-        return;
-    }
-
-    const String plain = lyrics->plainText();
-    if (!plain.startsWith(leading)) {
-        return;
-    }
-
-    const int leadingCols = textColumns(leading);
-    if (leadingCols <= 0) {
-        return;
-    }
-
-    // Ensure text blocks exist so selection formatting operates on real fragments.
-    lyrics->createBlocks();
-
-    TextCursor cursor(lyrics);
-    cursor.setSelectLine(0);
-    cursor.setSelectColumn(0);
-    cursor.setRow(0);
-    cursor.setColumn(static_cast<size_t>(leadingCols));
-
-    const FontStyle labelStyle = FontStyle(score->style().styleI(Sid::lyricsLabelFirstSystemFontStyle));
-    const Color labelColor = score->style().styleV(Sid::lyricsLabelFirstSystemColor).value<Color>();
-
-    // Keep the explicit selection while applying multiple attributes.
-    // setFormat() clears selection when not in edit mode, which can cause
-    // subsequent calls to style the whole syllable.
-    cursor.changeSelectionFormat(FormatId::Bold, bool(labelStyle & FontStyle::Bold));
-    cursor.changeSelectionFormat(FormatId::Italic, bool(labelStyle & FontStyle::Italic));
-    cursor.changeSelectionFormat(FormatId::Underline, bool(labelStyle & FontStyle::Underline));
-    cursor.changeSelectionFormat(FormatId::Strike, bool(labelStyle & FontStyle::Strike));
-    cursor.changeSelectionFormat(FormatId::Color, labelColor);
-    lyrics->setTextInvalid();
-}
+// Use shared helper from lyrics_utils.h
 
 void cleanupLeadingVerseNumberFormattingIfDefault(Score* score, staff_idx_t staffIdx)
 {
@@ -156,7 +93,7 @@ void cleanupLeadingVerseNumberFormattingIfDefault(Score* score, staff_idx_t staf
                     firstSyllableChecked[verse] = true;
 
                     const String plain = lyr->plainText();
-                    const String leading = extractLeadingVerseNumberLocal(plain);
+                    const String leading = extractLeadingVerseNumber(plain);
                     if (leading.isEmpty()) {
                         continue;
                     }
@@ -286,43 +223,7 @@ void clearGeneratedLyricsLabels(staff_idx_t staffIdx, System* system)
 
 }
 
-// ---------------------------------------------------------------------------
-// extractLeadingVerseNumber
-//   Parse a leading verse-number fragment from a lyrics string.
-//   Pattern: [digits][optional dot][optional whitespace] followed by a letter.
-//   Trailing whitespace is stripped from the returned string.
-//   Examples:  "1. Wir" -> "1."   "1 Wir" -> "1"   "1.Wir" -> "1."   "Wir" -> ""
-// ---------------------------------------------------------------------------
-String LyricsLayout::extractLeadingVerseNumber(const String& text)
-{
-    if (text.isEmpty() || !text.at(0).isDigit()) {
-        return String();
-    }
-
-    size_t i = 0;
-    // consume all leading digits
-    while (i < text.size() && text.at(i).isDigit()) {
-        ++i;
-    }
-
-    // optionally consume a dot
-    if (i < text.size() && text.at(i) == u'.') {
-        ++i;
-    }
-    const size_t endDotOrDigit = i;
-
-    // skip whitespace
-    while (i < text.size() && text.at(i).isSpace()) {
-        ++i;
-    }
-
-    // must be followed by at least one letter
-    if (i >= text.size() || !text.at(i).isLetter()) {
-        return String();
-    }
-
-    return text.mid(0, endDotOrDigit);
-}
+// extractLeadingVerseNumber implemented as local helper above
 
 // ---------------------------------------------------------------------------
 // buildVerseNumberMap
@@ -404,6 +305,18 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
                << " label='" << muPrintable(p.second) << "'";
     }
     return result;
+}
+
+void LyricsLayout::precomputeAndCacheVerseNumberMaps(Score* score)
+{
+    if (!score) return;
+    for (staff_idx_t staffIdx = 0; staffIdx < score->nstaves(); ++staffIdx) {
+        auto map = buildVerseNumberMap(score, staffIdx);
+        score->setCachedVerseNumberMap(staffIdx, map);
+        for (const auto& p : map) {
+            LOGD() << "  staff=" << staffIdx << " verse=" << p.first << " -> '" << muPrintable(p.second) << "'";
+        }
+    }
 }
 
 void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)

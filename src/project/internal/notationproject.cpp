@@ -220,13 +220,7 @@ Ret NotationProject::doLoad(const muse::io::path_t& path, const OpenParams& open
             continue;
         }
         LOGD() << "Precomputing verse-number maps for score='" << s->name() << "'";
-        for (staff_idx_t staffIdx = 0; staffIdx < s->nstaves(); ++staffIdx) {
-            auto map = mu::engraving::rendering::score::LyricsLayout::buildVerseNumberMap(s, staffIdx);
-            s->setCachedVerseNumberMap(staffIdx, map);
-            for (const auto& p : map) {
-                LOGD() << "  staff=" << staffIdx << " verse=" << p.first << " -> '" << muPrintable(p.second) << "'";
-            }
-        }
+        mu::engraving::rendering::score::LyricsLayout::precomputeAndCacheVerseNumberMaps(s);
         s->verseNumberCache().dirty = false;
     }
 

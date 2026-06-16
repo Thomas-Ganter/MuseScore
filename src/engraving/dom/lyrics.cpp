@@ -22,6 +22,9 @@
 
 #include "lyrics.h"
 
+#include "../rendering/score/lyrics_utils.h"
+#include "../rendering/score/lyricslayout.h"
+
 #include "types/translatablestring.h"
 
 #include "../editing/textedit.h"
@@ -68,36 +71,24 @@ LyricsLabel::LyricsLabel(ChordRest* parent)
     LLOG("LyricsLabel::ctor this=%p parent=%p live=%zu", this, parent, liveNow);
 }
 
+LyricsLabel::~LyricsLabel()
+{
+    const size_t liveNow = --s_lyricsLabelLiveCount;
+    LLOG("LyricsLabel::dtor this=%p live=%zu", this, liveNow);
+}
+
 LyricsLabel::LyricsLabel(const LyricsLabel& l)
     : TextBase(l)
 {
     const size_t liveNow = ++s_lyricsLabelLiveCount;
-    // Ensure element style is initialized for copy
-    if (!m_propertyFlagsList) {
-        initElementStyle(&lyricsElementStyle);
-    }
+    initElementStyle(&lyricsElementStyle);
     setGenerated(true);
     setSelectable(false);
     setAutoplace(false);
-    LLOG("LyricsLabel::copy-ctor this=%p parent=%p live=%zu", this, explicitParent(), liveNow);
+    LLOG("LyricsLabel::copy-ctor this=%p live=%zu", this, liveNow);
 }
 
-LyricsLabel::~LyricsLabel()
-{
-    const size_t liveNow = --s_lyricsLabelLiveCount;
-    LLOG("LyricsLabel::dtor this=%p parent=%p live=%zu", this, explicitParent(), liveNow);
-}
-
-size_t LyricsLabel::debugLiveCount()
-{
-    return s_lyricsLabelLiveCount.load();
-}
-
-double LyricsLabel::yRelativeToStaff() const
-{
-    const double yOff = staffOffsetY();
-    return pos().y() + chordRest()->pos().y() + yOff;
-}
+// helper included above
 
 void LyricsLabel::setYRelativeToStaff(double y)
 {
@@ -126,6 +117,39 @@ Lyrics::Lyrics(const Lyrics& l)
     m_ticks     = l.m_ticks;
     m_syllabic  = l.m_syllabic;
     m_separator = 0;
+}
+
+// use shared helper in lyrics_utils.h
+
+void Lyrics::prepareForEdit()
+{
+    // leading verse number is only relevant if there is no previous lyric, i. e. if we are the first sylable; in that case capture the leading verse number fragment before edit to be able to detect changes in finishEdit and trigger verse number cache update if needed
+    Lyrics* prev = prevLyrics(toLyrics(this));
+    if (!prev) {
+
+        m_leadingVerseBefore = extractLeadingVerseNumber(plainText());
+        LOGD() << "Lyrics::prepareForEdit captured leading='" << muPrintable(m_leadingVerseBefore) << "'";
+    }
+}
+
+void Lyrics::finishEdit()
+{
+    // if we are the first sylable, i. e. if there is no previous lyric, then check if the leading verse number fragment has changed and if so mark the verse number cache dirty to trigger a rebuild on next layout
+    Lyrics* prev = prevLyrics(toLyrics(this));
+    if (!prev) {
+        
+        String leadingAfter = extractLeadingVerseNumber(plainText());
+        if (m_leadingVerseBefore != leadingAfter) {
+            LOGD() << "Lyrics::finishEdit leading changed: before='" << muPrintable(m_leadingVerseBefore)
+            << "' after='" << muPrintable(leadingAfter) << "' - marking verseNumberCache dirty";
+            if (score()) {
+
+                score()->verseNumberCache().dirty = true;
+                // recompute verse number map immediately to have it ready for next layout and to update the debug log with the new verse numbers; this is not strictly needed as the cache will be recomputed on next layout anyway, but it helps to have the debug log updated right away to verify that the change was detected and the cache updated correctly
+                mu::engraving::rendering::score::LyricsLayout::precomputeAndCacheVerseNumberMaps(score());
+            }
+        }
+    }
 }
 
 Lyrics::~Lyrics()

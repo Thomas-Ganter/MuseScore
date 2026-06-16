@@ -37,6 +37,9 @@
 
 #include "log.h"
 
+#include "rendering/score/lyricslayout.h"
+#include "types/string.h"
+
 using namespace mu::engraving;
 
 //---------------------------------------------------------
@@ -116,6 +119,11 @@ void TextBase::startEdit(EditData& ed)
 
     ted->oldXmlText = xmlText();
     ted->startUndoIdx = score()->undoStack()->currentIndex();
+
+    // If this is a lyrics element, delegate capture to Lyrics object
+    if (isLyrics()) {
+        toLyrics(this)->prepareForEdit();
+    }
 
     const LayoutData* ldata = this->ldata();
     if (!ldata || ldata->layoutInvalid) {
@@ -244,6 +252,11 @@ void TextBase::endEdit(EditData& ed)
         renderer()->layoutText1(this);
     }
 
+    // If this is lyrics, delegate finish check to Lyrics object before the forced relayout
+    if (isLyrics()) {
+        toLyrics(this)->finishEdit();
+    }
+
     triggerLayout(); // force relayout even if text did not change
 
     if (isLyrics()) {
@@ -256,6 +269,7 @@ void TextBase::endEdit(EditData& ed)
     score()->addRefresh(canvasBoundingRect().adjusted(-w, -w, w, w));
 
     commitText();
+
 }
 
 void TextBase::commitText()

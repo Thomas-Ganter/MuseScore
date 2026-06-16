@@ -59,6 +59,8 @@ public:
 
     static void computeVerticalPositions(System* system, LayoutContext& ctx);
     static std::map<int, String> buildVerseNumberMap(Score* score, staff_idx_t staffIdx);
+    // Precompute and cache verse-number maps for all staves of the given score.
+    static void precomputeAndCacheVerseNumberMaps(Score* score);
 
 private:
     static void createOrRemoveLyricsLine(Lyrics* item, LayoutContext& ctx);
@@ -84,7 +86,6 @@ private:
     static void addToSkyline(System* system, staff_idx_t staffIdx, LayoutContext& ctx, const LyricsVersesMap& lyricsVersesAbove,
                              const LyricsVersesMap& lyricsVersesBelow);
 
-    static String extractLeadingVerseNumber(const String& text);
 
     static double lyricsLineStartX(const LyricsLineSegment* item);
     static double lyricsLineEndX(const LyricsLineSegment* item, const Lyrics* endLyrics = nullptr);
