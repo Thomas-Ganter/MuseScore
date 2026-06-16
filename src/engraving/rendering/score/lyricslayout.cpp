@@ -93,7 +93,7 @@ void cleanupLeadingVerseNumberFormattingIfDefault(Score* score, staff_idx_t staf
                     firstSyllableChecked[verse] = true;
 
                     const String plain = lyr->plainText();
-                    const String leading = extractLeadingVerseNumber(plain);
+                    const String leading = extractLeadingVerseNumber(plain, true);
                     if (leading.isEmpty()) {
                         continue;
                     }
@@ -235,11 +235,9 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
     std::map<int, String> result;
     std::map<int, bool> firstSyllableChecked;
     if (!score) {
-        LLOG("VRNUM buildVerseNumberMap: staff=%ld no score", staffIdx);
+        LOGD("VRNUM buildVerseNumberMap: staff=%ld no score", staffIdx);
         return result;
     }
-
-    LLOG("VRNUM buildVerseNumberMap: staff=%ld START", staffIdx);
 
     const track_idx_t startTrack = staffIdx * VOICES;
     const track_idx_t endTrack = startTrack + VOICES;
@@ -262,7 +260,7 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
 
                     firstSyllableChecked[verse] = true;
 
-                    const String leading = extractLeadingVerseNumber(lyr->plainText());
+                    const String leading = extractLeadingVerseNumber(lyr->plainText(), false);
                     if (!leading.isEmpty()) {
                         // Do not alter the original Lyrics formatting here — leave any
                         // in-place formatting untouched. We only record the leading
@@ -291,19 +289,12 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
                             }
                             lyr->setTextInvalid();
                         }
-                        LLOG("VRNUM buildVerseNumberMap: staff=%ld verse=%d leading='%s' measure=%d",
-                             staffIdx, verse, muPrintable(leading), measure->measureNumber() + 1);
                     }
                 }
             }
         }
     }
-    LLOG("VRNUM buildVerseNumberMap: staff=%ld END size=%ld", staffIdx, result.size());
-    // Also emit detailed debug entries so we can always see the computed map in logs.
-    for (const auto& p : result) {
-        LOGD() << "VRNUM buildVerseNumberMap DUMP: staff=" << staffIdx << " verse=" << p.first
-               << " label='" << muPrintable(p.second) << "'";
-    }
+
     return result;
 }
 
@@ -313,9 +304,12 @@ void LyricsLayout::precomputeAndCacheVerseNumberMaps(Score* score)
     for (staff_idx_t staffIdx = 0; staffIdx < score->nstaves(); ++staffIdx) {
         auto map = buildVerseNumberMap(score, staffIdx);
         score->setCachedVerseNumberMap(staffIdx, map);
+
+        LOGD() << "---------------------------------";
         for (const auto& p : map) {
             LOGD() << "  staff=" << staffIdx << " verse=" << p.first << " -> '" << muPrintable(p.second) << "'";
         }
+        LOGD() << "---------------------------------";
     }
 }
 
@@ -345,19 +339,10 @@ void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)
     String trailing;
 
     if (ctx.conf().styleB(Sid::lyricsAlignVerseNumber)) {
-        size_t leadingIdx = 0;
-        for (size_t i = 0; i < text.size(); ++i) {
-            Char ch = text.at(i);
-            if (ch.isLetter()) {
-                leadingIdx = i;
-                break;
-            }
-        }
+        // Use shared helper to extract a normalized leading verse fragment
+        leading = extractLeadingVerseNumber(text, true);
 
-        if (leadingIdx != 0) {
-            leading = text.mid(0, leadingIdx);
-        }
-
+        // trailing: keep existing logic to capture non-letter suffix
         size_t trailingIdx = text.size() - 1;
         for (int i = static_cast<int>(text.size() - 1); i >= 0; --i) {
             Char ch = text.at(i);
@@ -371,7 +356,7 @@ void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)
             trailing = text.mid(trailingIdx + 1);
         }
 
-        if (!leading.isEmpty() && leading.at(0).isDigit()) {
+        if (!leading.isEmpty()) {
             hasNumber = true;
         }
     }
@@ -413,7 +398,7 @@ void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)
 
                  const double leadingXpos = tb.xpos(leading.size(), item);
                  const double leadingWidth = leadingXpos - tb.boundingRect().x();
-                 LOGD() << "LyricsLayout leading measurement: leading='" << leading << "' leading.size=" << leading.size()
+                 LOGD() << "measurement: leading='" << leading << "' leading.size=" << leading.size()
                      << " tb.columns=" << tb.columns() << " leadingXpos=" << leadingXpos << " tb.bbox.x=" << tb.boundingRect().x()
                      << " leadingWidth=" << leadingWidth;
             const size_t trailingPos = text.size() - trailing.size();
@@ -889,169 +874,8 @@ void LyricsLayout::computeVerticalPositions(staff_idx_t staffIdx, System* system
     addToSkyline(system, staffIdx, ctx, lyricsVersesAbove, lyricsVersesBelow);
 
     if (generateLyricsLabels) {
-        struct LabelPlacement {
-            LyricsLabel* label = nullptr;
-            ChordRest* anchorCR = nullptr;
-            double candidateRightEdge = 0.0;  // used for first-system close placement
-            double labelRight = 0.0;
-            double labelWidth = 0.0;
-            double labelY = 0.0;
-        };
-
-        std::vector<LabelPlacement> placements;
-        placements.reserve(lyricsVersesAbove.size() + lyricsVersesBelow.size());
-
-        auto collectDummyLabels = [&](const LyricsVersesMap& lyricsVerses) {
-            std::set<int> createdVerses;
-            for (const auto& pair : lyricsVerses) {
-                int verseNumber = pair.first;
-
-                const LyricsVerse& lyricsVerse = pair.second;
-                if (lyricsVerse.lyrics().empty()) {
-                    continue;
-                }
-
-                Lyrics* anchorLyrics = lyricsVerse.lyrics().front();
-                ChordRest* anchorCR = anchorLyrics ? anchorLyrics->chordRest() : nullptr;
-                if (!anchorCR) {
-                    continue;
-                }
-
-                // Validate that the ChordRest's measure is still in the current system
-                // to avoid dangling pointers from measure reorganization.
-                Measure* crMeasure = anchorCR->measure();
-                if (!crMeasure) {
-                    continue;  // ChordRest is in an invalid state
-                }
-
-                bool measureInSystem = false;
-                for (const MeasureBase* mb : system->measures()) {
-                    if (mb == crMeasure) {
-                        measureInSystem = true;
-                        break;
-                    }
-                }
-                if (!measureInSystem) {
-                    continue;  // ChordRest's measure is not in this system
-                }
-
-                // Avoid creating multiple labels for same verse in this system
-                if (createdVerses.count(verseNumber)) {
-                    continue;
-                }
-
-                const auto verseLabelIt = verseNumberMap.find(verseNumber);
-                const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
-                // If no label text, skip creating a generated label here
-                if (verseLabel.isEmpty()) {
-                    continue;
-                }
-
-                LyricsLabel* label = nullptr;
-                // Since we now always clear old labels, always create fresh ones.
-                label = new LyricsLabel(anchorCR);
-                // Debug: log creation and associated verse label
-                LOGD() << "LyricsLayout create label: staff=" << staffIdx << " cr=" << anchorCR
-                       << " verse=" << verseNumber << " label='" << muPrintable(verseLabel) << "'";
-                label->setPlainText(verseLabel);
-                createdVerses.insert(verseNumber);
-
-                // Style: first system -> configured bold+color; subsequent systems -> configured bold+color.
-                if (isFirstSystem) {
-                    label->setFontStyle(FontStyle(ctx.conf().styleI(Sid::lyricsLabelFirstSystemFontStyle)));
-                    label->setColor(ctx.conf().styleV(Sid::lyricsLabelFirstSystemColor).value<Color>());
-                } else {
-                    label->setFontStyle(FontStyle(ctx.conf().styleI(Sid::lyricsLabelFollowingSystemFontStyle)));
-                    label->setColor(ctx.conf().styleV(Sid::lyricsLabelFollowingSystemColor).value<Color>());
-                }
-
-                // Attach first so track/staff context is fully initialized before text layout.
-                anchorCR->add(label);
-
-                TextLayout::layoutBaseTextBase1(label, ctx);
-                TextLayout::computeTextHighResShape(label, label->mutldata());
-
-                const double offset = label->absoluteFromSpatium(ctx.conf().styleS(Sid::lyricsRepeatedVerseNumberOffset));
-                const RectF anchorBbox = anchorLyrics->ldata()->bbox();
-                const RectF labelBbox = label->ldata()->bbox();
-
-                // Baseline-align the generated label with the source lyrics text.
-                const double anchorBaseline = anchorLyrics->y() + anchorLyrics->baseLine();
-                const double labelY = anchorBaseline - label->baseLine();
-
-                // Candidate right edge for first-system close placement.
-                const double anchorLeftSystem = anchorCR->x() + anchorLyrics->x() + anchorBbox.left();
-                const double candidateRightEdge = anchorLeftSystem - offset;
-
-                placements.push_back({
-                    .label = label,
-                    .anchorCR = anchorCR,
-                    .candidateRightEdge = candidateRightEdge,
-                    .labelRight = labelBbox.right(),
-                    .labelWidth = labelBbox.width(),
-                    .labelY = labelY,
-                });
-                 LLOG("LyricsLabel PoC label: staff=%ld system=%p label=%p cr=%p measure=%d verse=%d",
-                     staffIdx, system, label, anchorCR,
-                     crMeasure->measureNumber() + 1, anchorLyrics->verse());
-            }
-        };
-
-        collectDummyLabels(lyricsVersesAbove);
-        collectDummyLabels(lyricsVersesBelow);
-
-           LLOG("LyricsLabel PoC: staff=%ld system=%p placements=%zu live=%zu",
-               staffIdx, system, placements.size(), LyricsLabel::debugLiveCount());
-
-        if (!placements.empty()) {
-            if (isFirstSystem) {
-                // First system: right-align each label just before its anchor lyrics with a small offset.
-                double sharedRightEdge = std::numeric_limits<double>::infinity();
-                for (const LabelPlacement& placement : placements) {
-                    sharedRightEdge = std::min(sharedRightEdge, placement.candidateRightEdge);
-                }
-
-                for (const LabelPlacement& placement : placements) {
-                    if (!placement.anchorCR) {
-                        continue;
-                    }
-                    const double labelX = sharedRightEdge - placement.anchorCR->x() - placement.labelRight;
-                    placement.label->mutldata()->setPosX(labelX);
-                    placement.label->mutldata()->setPosY(placement.labelY);
-                }
-            } else {
-                // Subsequent systems: use the global score-wide column width for consistent alignment.
-                double effectiveMaxLabelWidth = globalMaxLabelWidth;
-                if (effectiveMaxLabelWidth <= 0.0) {
-                    for (const LabelPlacement& placement : placements) {
-                        effectiveMaxLabelWidth = std::max(effectiveMaxLabelWidth, placement.labelWidth);
-                    }
-                }
-
-                const Measure* firstMeasure = system->firstMeasure();
-                if (!firstMeasure) {
-                    for (const LabelPlacement& placement : placements) {
-                        if (!placement.anchorCR) {
-                            continue;
-                        }
-                        placement.label->mutldata()->setPosX(0.0);
-                        placement.label->mutldata()->setPosY(placement.labelY);
-                    }
-                } else {
-                    const double systemLeftPage = firstMeasure->pageBoundingRect().left();
-                    const double sharedRightPage = systemLeftPage + effectiveMaxLabelWidth;
-
-                    for (const LabelPlacement& placement : placements) {
-                        if (!placement.anchorCR) {
-                            continue;
-                        }
-                        const double labelX = sharedRightPage - placement.anchorCR->pageX() - placement.labelRight;
-                        placement.label->mutldata()->setPosX(labelX);
-                        placement.label->mutldata()->setPosY(placement.labelY);
-                    }
-                }
-            }
-        }
+        // Delegate generated label creation & placement to helper
+        layoutLyricLabels(system, staffIdx, verseNumberMap, ctx, globalMaxLabelWidth, isFirstSystem);
     }
 }
 
@@ -1101,6 +925,149 @@ void LyricsLayout::collectLyricsVerses(staff_idx_t staffIdx, System* system, Lyr
         }
     }
 
+}
+
+void LyricsLayout::layoutLyricLabels(System* system, staff_idx_t staffIdx, const std::map<int, String>& verseNumberMap,
+                                     LayoutContext& ctx, double globalMaxLabelWidth, bool isFirstSystem)
+{
+    struct LabelPlacement {
+        LyricsLabel* label = nullptr;
+        ChordRest* anchorCR = nullptr;
+        double candidateRightEdge = 0.0;  // used for first-system close placement
+        double labelRight = 0.0;
+        double labelWidth = 0.0;
+        double labelY = 0.0;
+    };
+
+    std::vector<LabelPlacement> placements;
+    // collect labels from verses already collected by caller
+    // We need to find anchor lyrics per verse in this system
+
+    auto collectForVerses = [&](const LyricsVersesMap& lyricsVerses) {
+        std::set<int> createdVerses;
+        for (const auto& pair : lyricsVerses) {
+            int verseNumber = pair.first;
+
+            const LyricsVerse& lyricsVerse = pair.second;
+            if (lyricsVerse.lyrics().empty()) {
+                continue;
+            }
+
+            Lyrics* anchorLyrics = lyricsVerse.lyrics().front();
+            ChordRest* anchorCR = anchorLyrics ? anchorLyrics->chordRest() : nullptr;
+            if (!anchorCR) {
+                continue;
+            }
+
+            Measure* crMeasure = anchorCR->measure();
+            if (!crMeasure) continue;
+
+            bool measureInSystem = false;
+            for (const MeasureBase* mb : system->measures()) {
+                if (mb == crMeasure) { measureInSystem = true; break; }
+            }
+            if (!measureInSystem) continue;
+
+            if (createdVerses.count(verseNumber)) continue;
+
+            const auto verseLabelIt = verseNumberMap.find(verseNumber);
+            const String verseLabel = (verseLabelIt != verseNumberMap.end()) ? verseLabelIt->second : String();
+            if (verseLabel.isEmpty()) continue;
+
+            LyricsLabel* label = new LyricsLabel(anchorCR);
+            LOGD() << "LyricsLayout create label: staff=" << staffIdx << " cr=" << anchorCR
+                   << " verse=" << verseNumber << " label='" << muPrintable(verseLabel) << "'";
+            label->setPlainText(verseLabel);
+            createdVerses.insert(verseNumber);
+
+            if (isFirstSystem) {
+                label->setFontStyle(FontStyle(ctx.conf().styleI(Sid::lyricsLabelFirstSystemFontStyle)));
+                label->setColor(ctx.conf().styleV(Sid::lyricsLabelFirstSystemColor).value<Color>());
+            } else {
+                label->setFontStyle(FontStyle(ctx.conf().styleI(Sid::lyricsLabelFollowingSystemFontStyle)));
+                label->setColor(ctx.conf().styleV(Sid::lyricsLabelFollowingSystemColor).value<Color>());
+            }
+
+            anchorCR->add(label);
+
+              TextLayout::layoutBaseTextBase1(label, ctx);
+              TextLayout::computeTextHighResShape(label, label->mutldata());
+
+            const double offset = label->absoluteFromSpatium(ctx.conf().styleS(Sid::lyricsRepeatedVerseNumberOffset));
+            const RectF anchorBbox = anchorLyrics->ldata()->bbox();
+            const RectF labelBbox = label->ldata()->bbox();
+
+            const double anchorBaseline = anchorLyrics->y() + anchorLyrics->baseLine();
+            const double labelY = anchorBaseline - label->baseLine();
+
+              const double anchorLeftSystem = anchorCR->x() + anchorLyrics->x() + anchorBbox.left();
+              const double candidateRightEdge = anchorLeftSystem - offset;
+
+              // Debug after computing anchorLeftSystem / candidateRightEdge
+              const RectF dbgLabelBbox2 = label->ldata()->bbox();
+              LLOG("LyricsLayout DEBUG labelBBox: staff=%ld system=%p verse=%d label=%p left=%f right=%f width=%f",
+                  staffIdx, system, anchorLyrics->verse(), label, dbgLabelBbox2.left(), dbgLabelBbox2.right(), dbgLabelBbox2.width());
+              LLOG("LyricsLayout DEBUG anchor: cr=%p pageX=%f x=%f anchorLeftSystem=%f candidateRightEdge=%f",
+                  anchorCR, anchorCR->pageX(), anchorCR->x(), anchorLeftSystem, candidateRightEdge);
+              LLOG("LyricsLayout DEBUG effectiveMaxLabelWidth=%f globalMaxLabelWidth=%f",
+                  globalMaxLabelWidth, globalMaxLabelWidth);
+
+              placements.push_back({ label, anchorCR, candidateRightEdge, labelBbox.right(), labelBbox.width(), labelY });
+              LLOG("LyricsLabel PoC label: staff=%ld system=%p label=%p cr=%p measure=%d verse=%d",
+                  staffIdx, system, label, anchorCR,
+                  crMeasure->measureNumber() + 1, anchorLyrics->verse());
+        }
+    };
+
+    // Reconstruct lyrics verses maps for this system to collect anchors
+    LyricsVersesMap lyricsVersesAbove, lyricsVersesBelow;
+    collectLyricsVerses(staffIdx, system, lyricsVersesAbove, lyricsVersesBelow);
+    collectForVerses(lyricsVersesAbove);
+    collectForVerses(lyricsVersesBelow);
+
+    LLOG("LyricsLabel PoC: staff=%ld system=%p placements=%zu live=%zu",
+         staffIdx, system, placements.size(), LyricsLabel::debugLiveCount());
+
+    if (placements.empty()) return;
+
+    if (isFirstSystem) {
+        double sharedRightEdge = std::numeric_limits<double>::infinity();
+        for (const LabelPlacement& placement : placements) {
+            sharedRightEdge = std::min(sharedRightEdge, placement.candidateRightEdge);
+        }
+        for (const LabelPlacement& placement : placements) {
+            if (!placement.anchorCR) continue;
+            const double labelX = sharedRightEdge - placement.anchorCR->x() - placement.labelRight;
+            placement.label->mutldata()->setPosX(labelX);
+            placement.label->mutldata()->setPosY(placement.labelY);
+        }
+    } else {
+        double effectiveMaxLabelWidth = globalMaxLabelWidth;
+        if (effectiveMaxLabelWidth <= 0.0) {
+            for (const LabelPlacement& placement : placements) {
+                effectiveMaxLabelWidth = std::max(effectiveMaxLabelWidth, placement.labelWidth);
+            }
+        }
+
+        const Measure* firstMeasure = system->firstMeasure();
+        if (!firstMeasure) {
+            for (const LabelPlacement& placement : placements) {
+                if (!placement.anchorCR) continue;
+                placement.label->mutldata()->setPosX(0.0);
+                placement.label->mutldata()->setPosY(placement.labelY);
+            }
+        } else {
+            const double systemLeftPage = firstMeasure->pageBoundingRect().left();
+            const double sharedRightPage = systemLeftPage + effectiveMaxLabelWidth;
+
+            for (const LabelPlacement& placement : placements) {
+                if (!placement.anchorCR) continue;
+                const double labelX = sharedRightPage - placement.anchorCR->pageX() - placement.labelRight;
+                placement.label->mutldata()->setPosX(labelX);
+                placement.label->mutldata()->setPosY(placement.labelY);
+            }
+        }
+    }
 }
 
 void LyricsLayout::setDefaultPositions(staff_idx_t staffIdx, const LyricsVersesMap& lyricsVersesAbove,

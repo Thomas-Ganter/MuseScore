@@ -75,6 +75,10 @@ private:
     static void collectLyricsVerses(staff_idx_t staffIdx, System* system, LyricsVersesMap& lyricsVersesAbove,
                                     LyricsVersesMap& lyricsVersesBelow);
 
+    // Layout generated lyric labels for a given system/staff
+    static void layoutLyricLabels(System* system, staff_idx_t staffIdx, const std::map<int, String>& verseNumberMap,
+                                  LayoutContext& ctx, double globalMaxLabelWidth, bool isFirstSystem);
+
     static void setDefaultPositions(staff_idx_t staffIdx, const LyricsVersesMap& lyricsVersesAbove,
                                     const LyricsVersesMap& lyricsVersesBelow, LayoutContext& ctx);
 

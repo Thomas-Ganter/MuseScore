@@ -5,7 +5,7 @@
 
 namespace mu {
 
-inline String extractLeadingVerseNumber(const String& text)
+inline String extractLeadingVerseNumber(const String& text, const bool withSpaces = false)
 {
     if (text.isEmpty() || !text.at(0).isDigit()) {
         return String();
@@ -19,10 +19,14 @@ inline String extractLeadingVerseNumber(const String& text)
     if (i < text.size() && text.at(i) == u'.') {
         ++i;
     }
-    const size_t endDotOrDigit = i;
 
+    size_t endDotOrDigit = i;
     while (i < text.size() && text.at(i).isSpace()) {
         ++i;
+    }
+
+    if (withSpaces) {
+        endDotOrDigit = i;
     }
 
     if (i >= text.size() || !text.at(i).isLetter()) {
