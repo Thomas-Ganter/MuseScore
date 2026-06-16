@@ -396,11 +396,11 @@ void LyricsLayout::layout(Lyrics* item, LayoutContext& ctx)
         if (!leading.isEmpty() || !trailing.isEmpty()) {
             const TextBlock& tb = ldata->blocks.at(0);
 
-                 const double leadingXpos = tb.xpos(leading.size(), item);
-                 const double leadingWidth = leadingXpos - tb.boundingRect().x();
-                 LOGD() << "measurement: leading='" << leading << "' leading.size=" << leading.size()
-                     << " tb.columns=" << tb.columns() << " leadingXpos=" << leadingXpos << " tb.bbox.x=" << tb.boundingRect().x()
-                     << " leadingWidth=" << leadingWidth;
+            const double leadingXpos = tb.xpos(leading.size(), item);
+            const double leadingWidth = leadingXpos - tb.boundingRect().x();
+                //  LOGD() << "measurement: leading='" << leading << "' leading.size=" << leading.size()
+                //      << " tb.columns=" << tb.columns() << " leadingXpos=" << leadingXpos << " tb.bbox.x=" << tb.boundingRect().x()
+                //      << " leadingWidth=" << leadingWidth;
             const size_t trailingPos = text.size() - trailing.size();
             const double trailingWidth = tb.boundingRect().right() - tb.xpos(trailingPos, item);
 
@@ -799,17 +799,16 @@ void LyricsLayout::computeVerticalPositions(System* system, LayoutContext& ctx)
     double globalMaxLabelWidth = 0.0;
     if (generateLyricsLabels && widthProbeCR) {
         std::set<String> uniqueLabels;
-        uniqueLabels.insert(u"[]");
 
         for (staff_idx_t staffIdx = 0; staffIdx < nStaves; ++staffIdx) {
             // Do NOT build or mutate the verse-number map during layout.
             // Always read the precomputed cache; if it's dirty, log and use cached map (may be empty).
             std::map<int, String> verseNumberMap = system->score()->cachedVerseNumberMap(staffIdx);
             if (system->score()->verseNumberCache().dirty) {
-                LLOG("VRNUM computeVerticalPositions: verseNumberCache dirty during precompute for staff=%ld - using cached map", staffIdx);
+                LOGD("VRNUM computeVerticalPositions: verseNumberCache dirty during precompute for staff=%ld - using cached map", staffIdx);
             }
             for (const auto& versePair : verseNumberMap) {
-                uniqueLabels.insert(u"[" + versePair.second + u"]");
+                uniqueLabels.insert(versePair.second );
             }
         }
         // Clear dirty flag after precomputation
@@ -975,8 +974,10 @@ void LyricsLayout::layoutLyricLabels(System* system, staff_idx_t staffIdx, const
             if (verseLabel.isEmpty()) continue;
 
             LyricsLabel* label = new LyricsLabel(anchorCR);
-            LOGD() << "LyricsLayout create label: staff=" << staffIdx << " cr=" << anchorCR
-                   << " verse=" << verseNumber << " label='" << muPrintable(verseLabel) << "'";
+            LOGD() << "create: staff=" << staffIdx << " cr=" << anchorCR
+                   << " verse=" << verseNumber << " label='" << muPrintable(verseLabel) << "'"
+                   << " isFirstSystem=" << isFirstSystem
+                   << " globalMaxLabelWidth=" << globalMaxLabelWidth;
             label->setPlainText(verseLabel);
             createdVerses.insert(verseNumber);
 
@@ -1005,15 +1006,15 @@ void LyricsLayout::layoutLyricLabels(System* system, staff_idx_t staffIdx, const
 
               // Debug after computing anchorLeftSystem / candidateRightEdge
               const RectF dbgLabelBbox2 = label->ldata()->bbox();
-              LLOG("LyricsLayout DEBUG labelBBox: staff=%ld system=%p verse=%d label=%p left=%f right=%f width=%f",
+              LOGD("LyricsLayout DEBUG labelBBox: staff=%ld system=%p verse=%d label=%p left=%f right=%f width=%f",
                   staffIdx, system, anchorLyrics->verse(), label, dbgLabelBbox2.left(), dbgLabelBbox2.right(), dbgLabelBbox2.width());
-              LLOG("LyricsLayout DEBUG anchor: cr=%p pageX=%f x=%f anchorLeftSystem=%f candidateRightEdge=%f",
+              LOGD("LyricsLayout DEBUG anchor: cr=%p pageX=%f x=%f anchorLeftSystem=%f candidateRightEdge=%f",
                   anchorCR, anchorCR->pageX(), anchorCR->x(), anchorLeftSystem, candidateRightEdge);
-              LLOG("LyricsLayout DEBUG effectiveMaxLabelWidth=%f globalMaxLabelWidth=%f",
+              LOGD("LyricsLayout DEBUG effectiveMaxLabelWidth=%f globalMaxLabelWidth=%f",
                   globalMaxLabelWidth, globalMaxLabelWidth);
 
               placements.push_back({ label, anchorCR, candidateRightEdge, labelBbox.right(), labelBbox.width(), labelY });
-              LLOG("LyricsLabel PoC label: staff=%ld system=%p label=%p cr=%p measure=%d verse=%d",
+              LOGD("LyricsLabel PoC label: staff=%ld system=%p label=%p cr=%p measure=%d verse=%d",
                   staffIdx, system, label, anchorCR,
                   crMeasure->measureNumber() + 1, anchorLyrics->verse());
         }
