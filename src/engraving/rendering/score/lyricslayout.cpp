@@ -34,8 +34,6 @@
 #include "dom/stafftype.h"
 #include "dom/system.h"
 
-#include "editing/undo.h"
-
 #include "tlayout.h"
 #include "textlayout.h"
 
@@ -49,7 +47,6 @@ using namespace mu::engraving::rendering::score;
 #include "lyrics_utils.h"
 
 namespace {
-constexpr bool kVerboseLyricsVerseScanLog = false;
 
 int textColumns(const String& s)
 {
