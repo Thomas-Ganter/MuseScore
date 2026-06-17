@@ -122,6 +122,7 @@ void TextBase::startEdit(EditData& ed)
 
     // If this is a lyrics element, delegate capture to Lyrics object
     if (isLyrics()) {
+        toLyrics(this)->setEditing(true);
         toLyrics(this)->prepareForEdit();
     }
 
@@ -156,6 +157,10 @@ void TextBase::endEdit(EditData& ed)
     UndoStack* undo = score()->undoStack();
     IF_ASSERT_FAILED(undo) {
         return;
+    }
+
+    if (isLyrics()) {
+        toLyrics(this)->setEditing(false);
     }
 
     const String actualXmlText = xmlText();

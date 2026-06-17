@@ -268,27 +268,28 @@ std::map<int, String> LyricsLayout::buildVerseNumberMap(Score* score, staff_idx_
                         result[verse] = leading;
                         // Low-risk: mark leading range invisible in-memory so layout
                         // accounts for width, but rendering will skip painting it.
-                        //lyr->createBlocks();
+                        lyr->createBlocks();
                         // mark fragments covering the leading columns as invisible
                         const int leadingCols = textColumns(leading);
-                        if ((leadingCols > 0) && false) {
+                        if ((leadingCols > 0) && !false) {
                             int col = 0;
                             for (TextBlock& tb : lyr->mutldata()->blocks) {
-                                for (TextFragment& frag : tb.fragments()) {
-                                    int fragCols = frag.columns();
-                                    if (col + fragCols <= leadingCols) {
-                                        frag.changeFormat(FormatId::Invisible, FormatValue(true));
-                                    } else if (col < leadingCols && col + fragCols > leadingCols) {
-                                        // overlapping fragment: mark whole frag invisible for now
-                                        frag.changeFormat(FormatId::Invisible, FormatValue(true));
-                                    }
-                                    col += fragCols;
-                                    if (col >= leadingCols) break;
+                                int blockCols = tb.columns();
+                                if (col >= leadingCols) {
+                                    break;
                                 }
-                                if (col >= leadingCols) break;
+                                if (col + blockCols <= leadingCols) {
+                                    // whole block is in leading part, mark it invisible
+                                    tb.changeFormat(FormatId::Invisible, FormatValue(true), 0, blockCols);
+                                    col += blockCols;
+                                    continue;
+                                }
+                                // only part of the block is in leading part, split it and mark the leading part
+                                tb.changeFormat(FormatId::Invisible, FormatValue(true), 0, leadingCols);
+                                break;
                             }
                             lyr->setTextInvalid();
-                        }
+                        }                        
                     }
                 }
             }

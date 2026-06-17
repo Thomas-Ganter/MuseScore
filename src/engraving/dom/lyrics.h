@@ -154,6 +154,12 @@ private:
     bool m_avoidBarlines = true;
     // captured leading verse fragment before edit
     String m_leadingVerseBefore;
+    // flag to indicate Lyrics is currently being edited
+    bool m_isEditing = false;
+
+public:
+    bool isEditing() const { return m_isEditing; }
+    void setEditing(bool v) { m_isEditing = v; }
 };
 
 //---------------------------------------------------------

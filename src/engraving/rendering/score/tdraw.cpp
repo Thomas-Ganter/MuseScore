@@ -1786,7 +1786,10 @@ void TDraw::draw(const TextBlock& textBlock, const TextBase* item, Painter* pain
 void TDraw::draw(const TextFragment& textFragment, const TextBase* item, muse::draw::Painter* painter)
 {
     // Skip drawing fragments explicitly marked invisible (they still occupy layout)
-    if (textFragment.format.invisible() && false) {
+    
+    if( item->isLyrics() && 
+        toLyrics(item)->isEditing() == false && 
+        textFragment.format.invisible() ) {
         LOGD() << "TextFragment invisible (transparent-draw): text='" << textFragment.text << "' pos=" << textFragment.pos;
 
         // Dump painter state to help debugging

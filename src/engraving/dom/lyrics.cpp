@@ -113,7 +113,7 @@ Lyrics::Lyrics(ChordRest* parent)
 Lyrics::Lyrics(const Lyrics& l)
     : TextBase(l)
 {
-    m_verse        = l.m_verse;
+    m_verse     = l.m_verse;
     m_ticks     = l.m_ticks;
     m_syllabic  = l.m_syllabic;
     m_separator = 0;
