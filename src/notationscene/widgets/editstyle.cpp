@@ -415,6 +415,13 @@ void EditStyle::classBegin()
         { StyleId::lyricsLimitDashCount, false, limitDashCount, 0 },
         { StyleId::lyricsMaxDashCount, false, lyricsMaxDashCount, resetLyricsMaxDashCount },
         { StyleId::lyricsCenterDashedSyllables, false, lyricsCenterDashedSyllables, lyricsResetCenterDashedSyllables },
+                { StyleId::lyricsRepeatVerseNumber, false, lyricsRepeatVerseNumber, resetLyricsRepeatVerseNumber },
+                { StyleId::lyricsRepeatedVerseNumberOffset, false, lyricsRepeatedVerseNumberOffset, resetLyricsRepeatedVerseNumberOffset },
+                { StyleId::lyricsLabelFirstSystemFontStyle, false, lyricsLabelFirstSystemFontStyle, resetLyricsLabelFirstSystemFontStyle },
+                { StyleId::lyricsLabelFirstSystemColor, false, lyricsLabelFirstSystemColor, resetLyricsLabelFirstSystemColor },
+                { StyleId::lyricsLabelFollowingSystemFontStyle, false, lyricsLabelFollowingSystemFontStyle,
+                    resetLyricsLabelFollowingSystemFontStyle },
+                { StyleId::lyricsLabelFollowingSystemColor, false, lyricsLabelFollowingSystemColor, resetLyricsLabelFollowingSystemColor },
 
         { StyleId::systemFrameDistance,     false, systemFrameDistance,     resetSystemFrameDistance },
         { StyleId::frameSystemDistance,     false, frameSystemDistance,     resetFrameSystemDistance },
@@ -1051,6 +1058,13 @@ void EditStyle::classBegin()
     connect(concertPitch,        &QCheckBox::toggled, this, &EditStyle::concertPitchToggled);
     connect(lyricsDashMinLength, &QDoubleSpinBox::valueChanged, this, &EditStyle::lyricsDashMinLengthValueChanged);
     connect(lyricsDashMaxLength, &QDoubleSpinBox::valueChanged, this, &EditStyle::lyricsDashMaxLengthValueChanged);
+    connect(lyricsRepeatVerseNumber, &QCheckBox::toggled, this, [this](bool checked) {
+        enableStyleWidget(StyleId::lyricsRepeatedVerseNumberOffset, checked);
+        enableStyleWidget(StyleId::lyricsLabelFirstSystemFontStyle, checked);
+        enableStyleWidget(StyleId::lyricsLabelFirstSystemColor, checked);
+        enableStyleWidget(StyleId::lyricsLabelFollowingSystemFontStyle, checked);
+        enableStyleWidget(StyleId::lyricsLabelFollowingSystemColor, checked);
+    });
     connect(minSystemDistance,   &QDoubleSpinBox::valueChanged, this, &EditStyle::systemMinDistanceValueChanged);
     connect(maxSystemDistance,   &QDoubleSpinBox::valueChanged, this, &EditStyle::systemMaxDistanceValueChanged);
 
@@ -1093,6 +1107,8 @@ void EditStyle::classBegin()
             connect(radioButton, &QRadioButton::toggled, setSignalMapper, mapFunction);
         } else if (auto checkBox = qobject_cast<QCheckBox*>(sw.widget)) {
             connect(checkBox, &QCheckBox::checkStateChanged, setSignalMapper, mapFunction);
+        } else if (auto colorLabel = qobject_cast<Awl::ColorLabel*>(sw.widget)) {
+            connect(colorLabel, &Awl::ColorLabel::colorChanged, setSignalMapper, mapFunction);
         } else if (auto button = qobject_cast<QAbstractButton*>(sw.widget)) {
             connect(button, &QAbstractButton::toggled, setSignalMapper, mapFunction);
         } else if (auto groupBox = qobject_cast<QGroupBox*>(sw.widget)) {
@@ -1849,6 +1865,13 @@ PropertyValue EditStyle::getValue(StyleId idx)
             ASSERT_X("unhandled int");
         }
     } break;
+    case P_TYPE::COLOR: {
+        if (Awl::ColorLabel* colorLabel = qobject_cast<Awl::ColorLabel*>(sw.widget)) {
+            return Color::fromQColor(colorLabel->color());
+        }
+        // Keep the current style value if widget type is unexpected (e.g. late signal during teardown).
+        return styleValue(idx);
+    } break;
     case P_TYPE::STRING: {
         if (qobject_cast<QFontComboBox*>(sw.widget)) {
             return static_cast<QFontComboBox*>(sw.widget)->currentFont().family();
@@ -1981,6 +2004,13 @@ void EditStyle::setValues()
                 unhandledType(sw);
             }
         } break;
+        case P_TYPE::COLOR: {
+            if (Awl::ColorLabel* colorLabel = qobject_cast<Awl::ColorLabel*>(sw.widget)) {
+                colorLabel->setColor(val.value<Color>().toQColor());
+            } else {
+                unhandledType(sw);
+            }
+        } break;
         case P_TYPE::STRING: {
             QString value = val.value<String>();
             if (qobject_cast<QFontComboBox*>(sw.widget)) {
@@ -2096,6 +2126,13 @@ void EditStyle::setValues()
                                       || styleValue(StyleId::lyricsMaxDashCount).toInt() > 1);
     resetLyricsDashMaxDistance->setEnabled(lyricsDashMaxDistance->isEnabled() && styleValue(StyleId::lyricsDashMaxDistance)
                                            != defaultStyleValue(StyleId::lyricsDashMaxDistance));
+
+    const bool repeatVerseNumberEnabled = styleValue(StyleId::lyricsRepeatVerseNumber).toBool();
+    enableStyleWidget(StyleId::lyricsRepeatedVerseNumberOffset, repeatVerseNumberEnabled);
+    enableStyleWidget(StyleId::lyricsLabelFirstSystemFontStyle, repeatVerseNumberEnabled);
+    enableStyleWidget(StyleId::lyricsLabelFirstSystemColor, repeatVerseNumberEnabled);
+    enableStyleWidget(StyleId::lyricsLabelFollowingSystemFontStyle, repeatVerseNumberEnabled);
+    enableStyleWidget(StyleId::lyricsLabelFollowingSystemColor, repeatVerseNumberEnabled);
 
     updateParenthesisIndicatingTiesGroupState();
 
@@ -2386,6 +2423,15 @@ void EditStyle::valueChanged(int i)
                                           || styleValue(StyleId::lyricsMaxDashCount).toInt() > 1);
         resetLyricsDashMaxDistance->setEnabled(lyricsDashMaxDistance->isEnabled() && styleValue(StyleId::lyricsDashMaxDistance)
                                                != defaultStyleValue(StyleId::lyricsDashMaxDistance));
+    }
+
+    if (idx == StyleId::lyricsRepeatVerseNumber) {
+        const bool repeatVerseNumberEnabled = styleValue(StyleId::lyricsRepeatVerseNumber).toBool();
+        enableStyleWidget(StyleId::lyricsRepeatedVerseNumberOffset, repeatVerseNumberEnabled);
+        enableStyleWidget(StyleId::lyricsLabelFirstSystemFontStyle, repeatVerseNumberEnabled);
+        enableStyleWidget(StyleId::lyricsLabelFirstSystemColor, repeatVerseNumberEnabled);
+        enableStyleWidget(StyleId::lyricsLabelFollowingSystemFontStyle, repeatVerseNumberEnabled);
+        enableStyleWidget(StyleId::lyricsLabelFollowingSystemColor, repeatVerseNumberEnabled);
     }
 }
 

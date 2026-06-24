@@ -11658,6 +11658,181 @@ followed by dashes</string>
              </layout>
             </item>
             <item>
+             <widget class="QGroupBox" name="lyricsRepeatVerseLabelsBox">
+              <property name="title">
+               <string>Repeat verse labels</string>
+              </property>
+              <layout class="QGridLayout" name="gridLayout_lyricsRepeatVerseLabels">
+               <item row="0" column="0" colspan="2">
+                <widget class="QCheckBox" name="lyricsRepeatVerseNumber">
+                 <property name="accessibleName">
+                  <string>Repeat verse number</string>
+                 </property>
+                 <property name="text">
+                  <string>Show repeated verse numbers</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="2">
+                <widget class="QToolButton" name="resetLyricsRepeatVerseNumber">
+                 <property name="toolTip">
+                  <string>Reset to default</string>
+                 </property>
+                 <property name="accessibleName">
+                  <string>Reset 'Show repeated verse numbers'</string>
+                 </property>
+                 <property name="text">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="labelLyricsRepeatedVerseNumberOffset">
+                 <property name="text">
+                  <string>Offset:</string>
+                 </property>
+                 <property name="buddy">
+                  <cstring>lyricsRepeatedVerseNumberOffset</cstring>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QDoubleSpinBox" name="lyricsRepeatedVerseNumberOffset">
+                 <property name="keyboardTracking">
+                  <bool>false</bool>
+                 </property>
+                 <property name="suffix">
+                  <string>sp</string>
+                 </property>
+                 <property name="minimum">
+                  <double>-99.989999999999995</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.100000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="2">
+                <widget class="QToolButton" name="resetLyricsRepeatedVerseNumberOffset">
+                 <property name="toolTip">
+                  <string>Reset to default</string>
+                 </property>
+                 <property name="accessibleName">
+                  <string>Reset 'Offset'</string>
+                 </property>
+                 <property name="text">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="labelLyricsLabelFirstSystemFontStyle">
+                 <property name="text">
+                  <string>First system font style:</string>
+                 </property>
+                 <property name="buddy">
+                  <cstring>lyricsLabelFirstSystemFontStyle</cstring>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="mu::notation::FontStyleSelect" name="lyricsLabelFirstSystemFontStyle" native="true"/>
+               </item>
+               <item row="2" column="2">
+                <widget class="QToolButton" name="resetLyricsLabelFirstSystemFontStyle">
+                 <property name="toolTip">
+                  <string>Reset to default</string>
+                 </property>
+                 <property name="accessibleName">
+                  <string>Reset 'First system font style'</string>
+                 </property>
+                 <property name="text">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="labelLyricsLabelFirstSystemColor">
+                 <property name="text">
+                  <string>First system color:</string>
+                 </property>
+                 <property name="buddy">
+                  <cstring>lyricsLabelFirstSystemColor</cstring>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="Awl::ColorLabel" name="lyricsLabelFirstSystemColor"/>
+               </item>
+               <item row="3" column="2">
+                <widget class="QToolButton" name="resetLyricsLabelFirstSystemColor">
+                 <property name="toolTip">
+                  <string>Reset to default</string>
+                 </property>
+                 <property name="accessibleName">
+                  <string>Reset 'First system color'</string>
+                 </property>
+                 <property name="text">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QLabel" name="labelLyricsLabelFollowingSystemFontStyle">
+                 <property name="text">
+                  <string>Following systems font style:</string>
+                 </property>
+                 <property name="buddy">
+                  <cstring>lyricsLabelFollowingSystemFontStyle</cstring>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="mu::notation::FontStyleSelect" name="lyricsLabelFollowingSystemFontStyle" native="true"/>
+               </item>
+               <item row="4" column="2">
+                <widget class="QToolButton" name="resetLyricsLabelFollowingSystemFontStyle">
+                 <property name="toolTip">
+                  <string>Reset to default</string>
+                 </property>
+                 <property name="accessibleName">
+                  <string>Reset 'Following systems font style'</string>
+                 </property>
+                 <property name="text">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0">
+                <widget class="QLabel" name="labelLyricsLabelFollowingSystemColor">
+                 <property name="text">
+                  <string>Following systems color:</string>
+                 </property>
+                 <property name="buddy">
+                  <cstring>lyricsLabelFollowingSystemColor</cstring>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="1">
+                <widget class="Awl::ColorLabel" name="lyricsLabelFollowingSystemColor"/>
+               </item>
+               <item row="5" column="2">
+                <widget class="QToolButton" name="resetLyricsLabelFollowingSystemColor">
+                 <property name="toolTip">
+                  <string>Reset to default</string>
+                 </property>
+                 <property name="accessibleName">
+                  <string>Reset 'Following systems color'</string>
+                 </property>
+                 <property name="text">
+                  <string notr="true"/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
              <spacer name="verticalSpacer_17">
               <property name="orientation">
                <enum>Qt::Orientation::Vertical</enum>
